@@ -45,6 +45,31 @@ tests/               # pytest, mirrors the package layout
 Dependency rule: `ui → export, storage, domain`; `export → domain`;
 `storage → domain`; `domain → nothing`. No layer imports `ui`.
 
+```mermaid
+flowchart TD
+    ui["<b>ui</b><br/>PySide6 windows, tabs, dialogs"]
+    export["<b>export</b><br/>Word document builder"]
+    storage["<b>storage</b><br/>config, database, migrations, backup"]
+    domain["<b>domain</b><br/>versions, school years, rich text<br/>(pure Python)"]
+
+    docx[("exam .docx files")]
+    db[("question bank .db files")]
+    cfg[("app_config.json, backups, log")]
+
+    ui --> export
+    ui --> storage
+    ui --> domain
+    export --> domain
+    storage --> domain
+
+    export -.writes.-> docx
+    storage -.reads / writes.-> db
+    storage -.reads / writes.-> cfg
+```
+
+Solid arrows are allowed imports; dotted arrows are file access. Only
+`storage` and `export` touch the disk, and only `ui` imports PySide6 widgets.
+
 ## How we get there
 
 Incrementally (strangler pattern), never by rewrite:
