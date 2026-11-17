@@ -16,14 +16,14 @@ New planning documents do not mean that prerequisites have been implemented.
 | 005 | [schema-normalization](../specs/005-schema-normalization/spec.md) | Relational categories and alternatives, real text search | 002, 003 | Draft |
 | 006 | [saved-exams-and-history](../specs/006-saved-exams-and-history/spec.md) | Save exams, see where each question was used | 005 | Draft |
 | 007 | [search-pagination](../specs/007-search-pagination/spec.md) | Browse 50 question cards per page with bounded content reads and persistent selection | 001, 002 | In progress (platform checks pending) |
-| 008 | [source-year-range](../specs/008-source-year-range/spec.md) | Optional inclusive "Desde" / "até" source-year filtering without rewriting legacy values | 007 | Draft |
+| 008 | [source-year-range](../specs/008-source-year-range/spec.md) | Optional inclusive "Desde" / "até" source-year filtering without rewriting legacy values | 007 | In progress (platform checks pending) |
 | 009 | [preview-resize](../specs/009-preview-resize/spec.md) | Reproduce and fix question-preview resizing without stretching the outer UI | 008 (execution sequence) | Draft |
 
 ## Owner-requested search fixes (2026-11-16)
 
 The owner requested plans for these three issues and confirmed 50 results per
 page and that the resize symptom concerns a question-card preview. Specs
-007 is in progress; 008–009 have Draft plans and tasks. Start with
+007 and 008 are in progress; 009 remains Draft. Start with
 [the agent handoff](search-tab-fixes.md).
 
 Proposed next priority after 001/002: **007 → 008 → 009**, before the broader

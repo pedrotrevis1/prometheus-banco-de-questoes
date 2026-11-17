@@ -88,7 +88,9 @@ Data structures are in [data-model.md](data-model.md).
 
 - **BL-040** Filters: categories (a question matches if it has any checked
   category), text contained in the statement, source (partial, ignoring
-  case), source year (exact), difficulty, school year, type.
+  case), source-year inclusive optional lower/upper bounds, difficulty, school year, type.
+  Invalid or non-numeric stored source years remain visible without bounds and
+  are excluded when a bound is active; stored text is never rewritten.
   Filters are applied when "Filtrar Questões" is pressed.
 - **BL-041** Results are ordered by ID and displayed in pages of at most 50;
   the footer shows the range, total and page controls.
@@ -147,10 +149,9 @@ Data structures are in [data-model.md](data-model.md).
 | KD-14 | Exactly five alternatives are required | 005 |
 | KD-15 | Categories cannot be renamed or moved; names are globally unique | 005 |
 | KD-17 | Tables and lists in pasted content are flattened in the exam | Backlog |
-| KD-18 | Source-year filtering only accepts an exact stored value; no optional inclusive lower/upper year bounds | 008 (planned) |
 | KD-19 | Owner reports that dragging the resize corner of a question-card preview in tab 2 makes the interface appear to stretch downward; affected control confirmed, exact reproduction and root cause unverified | 009 (planned) |
 | KD-20 | An empty or multi-letter answer can pass validation when shuffling and then fail while remapping the answer key | Backlog |
 
 Planning note: spec 007 pagination is implemented with platform verification
-pending. Specs 008–009 remain proposed; source-year and preview-resize behavior
-remain as described above.
+pending. Spec 008 source-year ranges are implemented with platform verification
+pending. Spec 009 preview-resize work remains proposed.

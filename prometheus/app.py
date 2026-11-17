@@ -1,3 +1,4 @@
+from prometheus.domain.source_years import validate_year_range, YearRangeError
 from prometheus.domain.search import SearchFilters, SearchViewState
 from prometheus.storage.search import page_questions
 from prometheus.storage import database as storage_database
@@ -1005,7 +1006,8 @@ class ExamGeneratorApp(QMainWindow):
             self.update_multi_version_controls()
         self.clear_register_form()
         self.reload_all_trees()
-        self.search_view.apply(self.current_search_filters())
+        applied = self.search_view.applied
+        self.search_view.apply(self.current_search_filters((applied.source_year_from, applied.source_year_to)))
         self.load_questions()
         return True
 
@@ -1065,7 +1067,7 @@ class ExamGeneratorApp(QMainWindow):
         <h3>1. Cadastrar Questão</h3>
         <p>Escolha o tipo e a dificuldade, informe o segmento e os anos/séries, selecione as categorias e preencha o enunciado. Nas questões de múltipla escolha, escreva as alternativas e marque a correta. Nas dissertativas, você pode registrar a resolução esperada. Clique em <b>Salvar Questão</b> para adicionar ao banco.</p>
         <h3>2. Buscar e Selecionar Questões</h3>
-        <p>Use os filtros de categoria, texto, fonte da questão, ano da fonte, dificuldade, ano/série escolar e tipo; depois clique em <b>Filtrar Questões</b>. A fonte pode ser buscada por parte do nome; o ano da fonte deve corresponder ao valor cadastrado. Deixe os campos de fonte e ano da fonte vazios para buscar sem essas restrições. Abra os cartões para revisar enunciados, alternativas e respostas. Marque <b>Selecionar</b> nas questões que entrarão na prova. Os resultados aparecem em páginas de até 50 questões; use <b>Anterior</b>, <b>Próxima</b> ou o número da página para navegar. A seleção permanece ao trocar de página ou filtro. Use <b>Navegar pelas questões selecionadas</b> para ver apenas essas questões. A exclusão de questões selecionadas inclui também as seleções que não estão visíveis na página atual.</p>
+        <p>Use os filtros de categoria, texto, fonte da questão, ano da fonte, dificuldade, ano/série escolar e tipo; depois clique em <b>Filtrar Questões</b>. A fonte pode ser buscada por parte do nome. Para o ano da fonte, use <b>Desde</b> para incluir esse ano e os seguintes, <b>até</b> para incluir esse ano e os anteriores, ou ambos para limitar o intervalo. Por exemplo: Desde 2022; até 2024; ou Desde 2022 até 2024. Use o mesmo ano nos dois campos para buscar um ano numérico exato. Deixe os campos vazios para buscar sem essas restrições. Abra os cartões para revisar enunciados, alternativas e respostas. Marque <b>Selecionar</b> nas questões que entrarão na prova. Os resultados aparecem em páginas de até 50 questões; use <b>Anterior</b>, <b>Próxima</b> ou o número da página para navegar. A seleção permanece ao trocar de página ou filtro. Use <b>Navegar pelas questões selecionadas</b> para ver apenas essas questões. A exclusão de questões selecionadas inclui também as seleções que não estão visíveis na página atual.</p>
         <h3>3. Configurar e Gerar Prova</h3>
         <p>Depois de selecionar questões na aba anterior, escolha se deseja incluir o gabarito. Para criar versões diferentes, ative <b>Gerar múltiplas versões</b>, informe a quantidade e escolha se deseja embaralhar questões e alternativas. A opção de embaralhar alternativas fica disponível quando há questões de múltipla escolha selecionadas. Clique em <b>Gerar Arquivo da Prova</b> e escolha onde salvar os arquivos Word.</p>
         """
@@ -2203,11 +2205,20 @@ class ExamGeneratorApp(QMainWindow):
         filter_panel.addWidget(self.txt_search_question_source)
 
         add_filter_header("Ano da Fonte:")
-        self.txt_search_source_year = QLineEdit()
-        self.txt_search_source_year.setPlaceholderText("Ex.: 2024")
-        self.txt_search_source_year.setToolTip("Ano de origem da questão, separado do ano/série escolar. Deixe vazio para buscar em todos os anos de origem.")
-        self.txt_search_source_year.returnPressed.connect(self.show_filtered_questions)
-        filter_panel.addWidget(self.txt_search_source_year)
+        source_year_row = QHBoxLayout()
+        self.txt_search_source_year_from = QLineEdit()
+        self.txt_search_source_year_to = QLineEdit()
+        for label_text, field in (("Desde", self.txt_search_source_year_from),
+                                  ("até", self.txt_search_source_year_to)):
+            label = QLabel(label_text)
+            label.setBuddy(field)
+            field.setAccessibleName(f"Ano da fonte {label_text}")
+            field.setPlaceholderText("Ex.: 2022")
+            field.setToolTip("Ano da fonte; deixe vazio para não limitar este lado do intervalo.")
+            field.returnPressed.connect(self.show_filtered_questions)
+            source_year_row.addWidget(label)
+            source_year_row.addWidget(field)
+        filter_panel.addLayout(source_year_row)
 
         add_filter_header("Dificuldade:")
         self.search_diff_group = QButtonGroup(self)
@@ -2444,13 +2455,15 @@ class ExamGeneratorApp(QMainWindow):
             self.show_alert("Erro", f"Erro ao buscar questões:\n{str(e)}", QMessageBox.Warning)
             return False
 
-    def current_search_filters(self):
+    def current_search_filters(self, bounds=None):
+        if bounds is None:
+            bounds = validate_year_range(self.txt_search_source_year_from.text(), self.txt_search_source_year_to.text())
         return SearchFilters(
             difficulties=tuple(self.checked_filter_values(self.search_diff_group, "Todas as Dificuldades")),
             question_types=tuple(self.checked_filter_values(self.search_type_group, "Todos os Tipos")),
             text=self.txt_search_question_text.text().strip(),
             source=self.txt_search_question_source.text().strip(),
-            source_year=self.txt_search_source_year.text().strip(),
+            source_year_from=bounds[0], source_year_to=bounds[1],
             school_years=tuple(self.checked_filter_values(self.search_year_group, "Todos os Anos")),
             categories=tuple(self.get_checked_subjects(self.tree_search_subjects)),
         )
@@ -2474,8 +2487,17 @@ class ExamGeneratorApp(QMainWindow):
         self.scroll_area.verticalScrollBar().setValue(0)
 
     def show_filtered_questions(self):
+        try:
+            filters = self.current_search_filters()
+        except YearRangeError as e:
+            message = ("O ano em 'Desde' deve ser menor ou igual ao ano em 'até'."
+                       if e.code == 'inverted' else
+                       "Informe um ano inteiro entre 1 e 9999 ou deixe o campo vazio.")
+            self.show_alert("Ano da fonte inválido", message, QMessageBox.Warning)
+            (self.txt_search_source_year_from if e.field == 'from' else self.txt_search_source_year_to).setFocus()
+            return
         previous = (self.search_view.applied, self.search_view.selected_only, self.search_view.page)
-        self.search_view.apply(self.current_search_filters())
+        self.search_view.apply(filters)
         if not self.load_questions():
             self.search_view.applied, self.search_view.selected_only, self.search_view.page = previous
             return

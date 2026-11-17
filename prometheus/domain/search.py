@@ -10,7 +10,8 @@ class SearchFilters:
     question_types: tuple[str, ...] = ()
     text: str = ''
     source: str = ''
-    source_year: str = ''
+    source_year_from: int | None = None
+    source_year_to: int | None = None
     school_years: tuple[str, ...] = ()
     categories: tuple[str, ...] = ()
 

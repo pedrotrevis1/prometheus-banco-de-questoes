@@ -1,6 +1,6 @@
 # Feature specification: Optional source-year range
 
-**Folder**: `008-source-year-range` | **Status**: Draft | **Created**: 2026-11-16
+**Folder**: `008-source-year-range` | **Status**: In progress | **Created**: 2026-11-16
 **Fixes**: KD-18 | **Prerequisite**: 007
 **Plan**: [plan.md](plan.md) | **Tasks**: [tasks.md](tasks.md)
 

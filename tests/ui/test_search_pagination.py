@@ -121,3 +121,66 @@ def test_exam_includes_selections_from_multiple_pages(window, tmp_path, monkeypa
     window.generate_word_doc()
     text = '\n'.join(paragraph.text for paragraph in Document(destination).paragraphs)
     assert 'Questão 1' in text and 'Questão 101' in text
+
+
+def test_source_year_apply_and_unapplied_edits_preserve_selection(window):
+    window.conn.execute("UPDATE questoes SET ano_origem = CASE WHEN id <= 60 THEN '2022' ELSE '2023' END")
+    window.conn.commit()
+    window.selected_ids.add(123)
+    window.txt_search_source_year_from.setText('2022')
+    window.txt_search_source_year_to.setText('2022')
+    window.show_filtered_questions()
+    assert card_ids(window) == list(range(1, 51))
+    assert window.search_view.applied.source_year_from == 2022
+    assert 'de 60' in window.lbl_result_range.text()
+    window.txt_search_source_year_from.setText('2023')
+    window.move_search_page(2)
+    assert card_ids(window) == list(range(51, 61))
+    assert window.selected_ids == {123}
+    window.btn_browse_selected_questions.setEnabled(True)
+    window.btn_browse_selected_questions.setChecked(True)
+    assert card_ids(window) == [123]
+
+
+def test_invalid_source_year_preserves_selected_view_and_page(window, monkeypatch):
+    messages = []
+    monkeypatch.setattr(window, 'show_alert', lambda title, text, *args: messages.append(text))
+    window.selected_ids.update(range(1, 102))
+    window.btn_browse_selected_questions.setEnabled(True)
+    window.btn_browse_selected_questions.setChecked(True)
+    window.move_search_page(2)
+    before = card_ids(window)
+    window.txt_search_source_year_from.setText('2024')
+    window.txt_search_source_year_to.setText('2022')
+    window.show_filtered_questions()
+    assert messages[-1] == "O ano em 'Desde' deve ser menor ou igual ao ano em 'até'."
+    assert window.search_view.selected_only and window.search_view.page == 2
+    assert card_ids(window) == before and len(window.selected_ids) == 101
+    window.txt_search_source_year_from.setText('202x')
+    window.show_filtered_questions()
+    assert messages[-1] == 'Informe um ano inteiro entre 1 e 9999 ou deixe o campo vazio.'
+    assert window.search_view.selected_only and card_ids(window) == before
+
+
+@pytest.mark.parametrize('field_name', ['txt_search_source_year_from', 'txt_search_source_year_to'])
+def test_enter_applies_once_from_either_year_field(window, monkeypatch, field_name):
+    import prometheus.app as app_module
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    calls = []
+    original = app_module.page_questions
+    monkeypatch.setattr(app_module, 'page_questions', lambda *args, **kwargs: (calls.append(1), original(*args, **kwargs))[1])
+    field = getattr(window, field_name)
+    field.setText('2022')
+    QTest.keyClick(field, Qt.Key_Return)
+    assert len(calls) == 1
+
+
+def test_source_year_fields_have_accessible_labels_and_tooltips(window):
+    from PySide6.QtWidgets import QLabel
+    pairs = [(label.text(), label.buddy()) for label in window.findChildren(QLabel) if label.buddy()]
+    assert ('Desde', window.txt_search_source_year_from) in pairs
+    assert ('até', window.txt_search_source_year_to) in pairs
+    for field in (window.txt_search_source_year_from, window.txt_search_source_year_to):
+        assert 'fonte' in field.accessibleName().lower()
+        assert 'vazio' in field.toolTip().lower()
