@@ -2,21 +2,15 @@
 
 Last updated: 2026-11-14
 
-## Current state (v1.1)
+## Current state (001 in progress)
 
-One file, `Prometheus1.1.py` (3,575 lines):
-
-| Lines (approx.) | Content |
-|---|---|
-| 15–716 | Pix QR code image embedded as base64 |
-| 731–982 | Constants, light/dark stylesheets, Windows theme overrides |
-| 983–1133 | Custom icon engine and painted combo/spin boxes |
-| 1135–1568 | Dialogs and widgets: `AddSubjectDialog`, `InsertEquationDialog`, `QuestionCard`, resize helpers, `AccessibleSelectionStyle` |
-| 1570–3566 | `ExamGeneratorApp(QMainWindow)`: 63 methods covering UI construction, configuration file, database connection and migration, SQL queries, HTML clean-up, version shuffling and Word export |
-
-Consequences: nothing is testable without a window; a change to storage or
-export means editing the main window class; there are no tests, no dependency
-file and no build script in the repository.
+The application lives in `prometheus/app.py` and starts with
+`python -m prometheus`. The Pix image is a bundled asset. Version shuffling,
+school-year parsing, and rich-text helpers live in `prometheus/domain/`.
+`prometheus/storage/` handles configuration, validated bank opening, schema
+migrations, backup and logging. Qt-free storage tests and offscreen UI checks
+cover the safety workflow. Most UI and export code remains in the main window
+module. Windows verification remains pending.
 
 ## Target state
 

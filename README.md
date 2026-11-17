@@ -54,24 +54,43 @@ Bancos criados ou abertos manualmente podem estar em outros locais, conforme a e
 
 **Copiar apenas o executável não transfere as questões nem as configurações para outro computador.** Para transferir um banco, copie também o arquivo `.db` e abra-o no aplicativo.
 
-Mantenha cópias de segurança dos seus bancos, especialmente antes de atualizar o programa. A versão 1.1 adiciona os novos campos aos bancos existentes sem exigir um novo cadastro das questões.
+Use **Fazer backup** no menu para salvar uma cópia do banco em um novo arquivo.
+Antes de atualizar a estrutura de um banco, o aplicativo cria uma cópia
+automática. São mantidos até três backups automáticos por banco; quando for
+necessário excluir um backup antigo, o aplicativo exibirá o caminho e pedirá
+confirmação. Se você recusar, a atualização será cancelada.
+
+Se um banco não for encontrado, localize o arquivo ou remova a disciplina da
+lista. Remover da lista não apaga o arquivo. Evite sincronizar um banco aberto
+por serviços de nuvem e mantenha cópias de segurança separadas.
 
 ## Executar a partir do código-fonte
 
-Arquivo principal da versão atual: `Prometheus1.1.py`.
-
-O ambiente utilizado para gerar o executável Windows usa:
-
-- Python 3.14.5 — 64 bits
-- PySide6 6.11.1
-- PyInstaller 6.20.0
-- python-docx 1.2.0
+Use Python 3.14. As dependências de execução e desenvolvimento têm versões
+fixadas em `requirements.txt` e `requirements-dev.txt`.
 
 No PowerShell, dentro da pasta do projeto:
 
     python -m venv .venv
-    .\.venv\Scripts\python.exe -m pip install -r requirements-windows.txt
-    .\.venv\Scripts\python.exe Prometheus1.1.py
+    .\.venv\Scripts\Activate.ps1
+    python -m pip install -r requirements-dev.txt
+    python -m prometheus
+
+No macOS, ative o ambiente com `source .venv/bin/activate` e use os mesmos
+comandos de instalação e execução. Para executar os testes sem abrir uma janela:
+
+    python -m pytest
+
+Para gerar o executável no Windows, no ambiente preparado acima:
+
+    .\build_windows.ps1
+
+O executável é criado em `dist/Prometheus.exe`. O comando deve ser executado no
+Windows; o resultado precisa ser testado nesse sistema, incluindo o QR Code Pix
+em **Sobre**. O macOS também é uma plataforma oficialmente suportada.
+
+O código está disponível com todos os direitos reservados; nenhuma licença de
+reutilização é concedida.
 
 ## Privacidade
 

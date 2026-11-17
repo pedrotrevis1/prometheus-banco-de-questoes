@@ -1,7 +1,7 @@
 # Feature specification: Data safety
 
 **Folder**: `002-data-safety` | **Status**: Draft | **Created**: 2026-11-14
-**Fixes**: KD-01, KD-02, KD-03, KD-04, KD-05, KD-06
+**Fixes**: KD-01, KD-02, KD-04, KD-05, KD-06; KD-03 retained by owner decision
 
 ## Why
 
@@ -26,7 +26,7 @@ of seeing an empty bank.
 2. **Given** that message, **when** I locate the moved file, **then** the
    discipline points to the new path and my questions appear.
 3. **Given** a first run with no configuration, **when** the app starts,
-   **then** the default bank is created as today.
+   **then** it asks before creating the default bank; declining creates no bank.
 
 ### US2 — Only Prometheus banks are opened and modified (P1)
 
@@ -49,20 +49,18 @@ of seeing an empty bank.
    copy is saved automatically before any change, and the upgrade either
    completes or leaves the bank exactly as it was.
 3. **Given** more than the retention limit of automatic backups for a bank,
-   **when** a new one is made, **then** the oldest are removed.
+   **when** a new one is needed, **then** the app names the oldest backup and asks before deleting it; if declined, the upgrade does not proceed.
 
-### US4 — Deleting questions is deliberate and visible (P1)
+### US4 — Preserve bulk deletion (P1)
 
-As a teacher, I cannot delete questions merely because they are ticked for an
-exam, and I always see what I am about to delete.
+The owner chose to retain the current bulk deletion workflow, including its
+use of the exam selection and its existing confirmation.
 
-**Acceptance scenarios**
+**Acceptance scenario**
 
-1. **Given** a question card, **when** I choose "Excluir" on it and confirm a
-   dialog that shows its ID and the beginning of its statement, **then** that
-   question alone is deleted and removed from the exam selection.
-2. **Given** several questions selected for an exam, **when** I look at the
-   search tab, **then** there is no action that deletes all of them at once.
+1. **Given** selected questions, **when** the teacher confirms the existing
+   bulk deletion dialog, **then** the selected questions are deleted as today,
+   including selected questions hidden by a filter.
 
 ### US5 — Disciplines can be managed without losing a link (P2)
 
@@ -84,8 +82,8 @@ exam, and I always see what I am about to delete.
 
 ## Requirements
 
-- **FR-001** The app never creates a database file except on first run
-  (default bank) or when the user completes "Criar Novo Banco".
+- **FR-001** The app never creates a database file except when the user confirms creation of the first-run default bank
+  or completes "Criar Novo Banco".
 - **FR-002** Before using a file as a bank, the app verifies it is a SQLite
   database that is either empty/new or contains the Prometheus tables.
 - **FR-003** Banks carry a schema version. The app upgrades older banks,
@@ -94,10 +92,9 @@ exam, and I always see what I am about to delete.
 - **FR-005** The user can create a backup of the current bank at any time to a
   location of their choice. Default file name: `<bank>_backup_<YYYY-MM-DD_HHMM>.db`.
 - **FR-006** Automatic backups are stored in a `backups` folder inside the app
-  data directory and limited to the 5 most recent per bank.
-- **FR-007** Questions are deleted one at a time from their card, with a
-  confirmation identifying the question. The bulk "Excluir questões
-  selecionadas" action is removed.
+  data directory and limited to the 3 most recent per bank; deleting an old backup requires explicit confirmation naming it. If declined, the upgrade is cancelled.
+- **FR-007** The existing bulk "Excluir questões selecionadas" action and its
+  confirmation are retained.
 - **FR-008** Discipline names are unique ignoring case and surrounding spaces,
   in both "Criar Novo Banco" and "Abrir Banco Existente".
 - **FR-009** A discipline can be renamed and can be removed from the list.
@@ -112,7 +109,7 @@ exam, and I always see what I am about to delete.
 
 ## Success criteria
 
-- None of KD-01 to KD-06 can be reproduced.
+- KD-01, KD-02, KD-04, KD-05 and KD-06 can no longer be reproduced; KD-03 remains by owner decision.
 - A bank from v1.1 opens, is backed up once, is upgraded, and shows identical
   content.
 - Interrupting an upgrade (simulated failure) leaves the original bank intact.
@@ -123,12 +120,11 @@ exam, and I always see what I am about to delete.
 - Trash / undo for deleted questions.
 - Scheduled backups; detection of concurrent use from two computers.
 
-## Open questions
+## Owner decisions
 
-- [NEEDS CLARIFICATION: Is removing bulk delete acceptable (FR-007)? The
-  alternative is to keep it but with its own separate selection and a list of
-  the affected questions in the confirmation.]
-- [NEEDS CLARIFICATION: Is 5 the right number of automatic backups to keep?
-  Banks with many images can be large.]
-- [NEEDS CLARIFICATION: Should the last removed/renamed discipline be undoable,
-  or is "the file is kept on disk" enough?]
+- Retain bulk deletion as it currently works, including hidden selected questions.
+- Keep at most three automatic backups per bank.
+- No undo for discipline removal or rename; removal leaves the file on disk.
+- Proceed with 002 while the 001 Windows verification remains pending.
+- Ask for explicit confirmation before creating the first-run default bank.
+- Ask before deleting an identified old backup; if declined, cancel the upgrade.

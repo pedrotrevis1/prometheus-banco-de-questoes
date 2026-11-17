@@ -1,4 +1,4 @@
-# Baseline data model (v1.1)
+# Baseline data model (002 in progress)
 
 ## Application data directory
 
@@ -16,13 +16,16 @@
 }
 ```
 
-An unreadable or invalid file is replaced in memory by the default above.
+An unreadable or invalid file is logged and replaced in memory by the default above.
+An empty discipline list is supported. Configuration saves use atomic replacement.
 The theme is not stored.
 
 ## Question bank (SQLite, one file per discipline)
 
-`PRAGMA foreign_keys = ON` is set per connection. `PRAGMA user_version` is
-unused (always 0); the schema is upgraded by checking for missing columns.
+`PRAGMA foreign_keys = ON` is set per connection. `PRAGMA user_version` is 1
+after the backup-protected migration from legacy version 0. Newer versions are
+rejected. Automatic backups are stored under the app data directory and capped
+at three per bank, with confirmation before deleting an identified old copy. The replacement is published before confirmed old copies are removed; a deletion failure can leave more than three copies.
 
 ### `questoes`
 

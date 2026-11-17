@@ -66,7 +66,7 @@ clean-up rules knowing a test will fail if I break them.
 - **FR-006** The Pix QR image is a file asset, not source code.
 - **FR-007** The executable build is a documented, repeatable command.
 - **FR-008** The README's developer instructions match the repository.
-- **FR-009** The release is identified by a git tag.
+- **FR-009** The release is identified by a git tag when released.
 
 ## Success criteria
 
@@ -79,11 +79,8 @@ clean-up rules knowing a test will fail if I break them.
 
 Splitting the UI class, changing storage, fixing any known defect.
 
-## Open questions
+## Owner decisions
 
-- [NEEDS CLARIFICATION: What exact PyInstaller command and options produce the
-  current `Prometheus1.1.exe`? It is not in the repository.]
-- [NEEDS CLARIFICATION: Which license should the project use? Without one,
-  nobody else may legally reuse or contribute to the code.]
-- [NEEDS CLARIFICATION: Is macOS a supported platform or only incidental? This
-  decides whether macOS is tested before each release.]
+- Establish and document a new Windows PyInstaller command; the old command is unknown.
+- All rights are reserved; no open-source license is granted.
+- macOS is officially supported and tested before each release.

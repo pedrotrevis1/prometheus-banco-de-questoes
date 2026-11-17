@@ -11,6 +11,7 @@ coded, and the documents here are the source of truth for what the app should do
 | [roadmap.md](roadmap.md) | Ordered list of iterations and their status |
 | [architecture.md](architecture.md) | Current structure, target structure, key decisions |
 | [glossary.md](glossary.md) | Domain terms, Portuguese ↔ English |
+| [search-tab-fixes.md](search-tab-fixes.md) | Owner-requested tab-2 fixes, decisions, source evidence and instructions for future implementation chats |
 | [../specs/000-baseline/](../specs/000-baseline/spec.md) | What the released app does today, including known defects |
 | `../specs/NNN-name/` | One folder per feature: `spec.md`, then `plan.md` and `tasks.md` |
 
@@ -24,7 +25,10 @@ coded, and the documents here are the source of truth for what the app should do
 
 Features 001 and 002 have all three. Features 003–006 have a spec only; their
 plans are deliberately left for when each one starts, because a plan written
-against code that is about to change goes stale.
+against code that is about to change goes stale. Features 007–009 have all
+three at the owner's explicit request for advance implementation instructions;
+they are Drafts, and agents must revalidate paths and prerequisites before
+implementing them. Their addition does not change released behavior.
 
 ## Conventions
 
