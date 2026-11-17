@@ -12,7 +12,9 @@ migrations, backup and logging. Qt-free storage tests and offscreen UI checks
 cover the safety workflow. Most UI and export code remains in the main window
 module. Search state and bounded queries live in `prometheus/domain/search.py`
 and `prometheus/storage/search.py`; the UI renders one page of at most 50
-question cards. Windows verification remains pending.
+question cards. `prometheus/domain/preview.py` holds preview resize policy;
+Qt widgets measure the viewport and apply the resulting geometry. Windows
+verification remains pending.
 
 ## Target state
 

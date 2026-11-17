@@ -1,3 +1,4 @@
+from prometheus.domain.preview import legacy_drag_height, PreviewSizing
 from prometheus.domain.source_years import validate_year_range, YearRangeError
 from prometheus.domain.search import SearchFilters, SearchViewState
 from prometheus.storage.search import page_questions
@@ -31,7 +32,7 @@ from PySide6.QtWidgets import (
     QRadioButton, QGridLayout, QProxyStyle, QStyle, QHeaderView, QStyleFactory, QSpinBox,
     QStyleOptionComboBox, QStyleOptionSpinBox
 )
-from PySide6.QtCore import Qt, QByteArray, QBuffer, QIODevice, QPoint, QPointF, QRectF, QSize, QTimer
+from PySide6.QtCore import Qt, QByteArray, QBuffer, QIODevice, QPoint, QPointF, QRectF, QSize, QTimer, QEvent
 from PySide6.QtGui import QFont, QPalette, QIcon, QIconEngine, QTextDocument, QTextImageFormat, QImage, QPixmap, QTextCharFormat, QTextCursor, QPainter, QPen, QPolygon, QPainterPath, QColor
 from docx import Document
 from docx.shared import Inches, Pt
@@ -578,9 +579,14 @@ class InsertEquationDialog(QDialog):
 
 class QuestionCard(QFrame):
     def __init__(self, q_id, subject, difficulty, ano, q_type, html_content, is_selected, toggle_callback,
-                 question_source="", source_year=""):
+                 question_source="", source_year="", result_viewport=None):
         super().__init__()
         self.q_id = q_id
+        self._result_viewport = result_viewport
+        self._preview_sizing = PreviewSizing()
+        self._fitting_preview = False
+        if result_viewport is not None:
+            result_viewport.installEventFilter(self)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(15, 15, 15, 15)
@@ -634,8 +640,7 @@ class QuestionCard(QFrame):
         self.view_panel.setMinimumHeight(0)
         self.view_panel.setMaximumHeight(150)
         self.view_panel._resize_minimum = 60
-        self.view_panel._preview_user_resized = False
-        self._preview_default_height = None
+        self.view_panel._preview_card = self
         self._preview_content_height = 0
         self.layout.addWidget(self.view_panel)
         self.view_panel.document().documentLayout().documentSizeChanged.connect(self._fit_initial_preview)
@@ -643,39 +648,61 @@ class QuestionCard(QFrame):
         self.resize_handle = VerticalResizeHandle(self.view_panel)
         self.layout.addWidget(self.resize_handle, alignment=Qt.AlignRight)
 
+    def _preview_geometry(self):
+        viewport = self._result_viewport
+        viewport_height = viewport.height() if viewport is not None else self.window().height()
+        if viewport_height <= 0:
+            viewport_height = 600
+        margins = self.layout.contentsMargins()
+        header = self.layout.itemAt(0).sizeHint().height()
+        chrome = margins.top() + margins.bottom() + header + self.resize_handle.height() + 2 * self.layout.spacing()
+        return viewport_height, chrome
+
+    def _set_preview_height(self, height):
+        if self.view_panel.height() != height:
+            self.view_panel.setFixedHeight(height)
+
     def _fit_initial_preview(self, *_):
-        viewport_width = self.view_panel.viewport().width()
-        if viewport_width <= 0:
+        if self._fitting_preview:
             return
+        self._fitting_preview = True
+        try:
+            viewport_width = self.view_panel.viewport().width()
+            if viewport_width <= 0:
+                return
+            document = self.view_panel.document()
+            if document.textWidth() != viewport_width:
+                document.setTextWidth(viewport_width)
+            content_height = document.documentLayout().documentSize().height()
+            if content_height <= 0:
+                return
+            self._preview_content_height = max(1, int(content_height + 12))
+            self.btn_toggle.setVisible(self._preview_content_height > 150)
+            self._set_preview_height(self._preview_sizing.fit(self._preview_content_height, *self._preview_geometry()))
+        finally:
+            self._fitting_preview = False
 
-        document = self.view_panel.document()
-        document.setTextWidth(viewport_width)
-        content_height = document.documentLayout().documentSize().height()
-        if content_height <= 0:
-            return
+    def eventFilter(self, watched, event):
+        if watched is self._result_viewport and event.type() == QEvent.Resize:
+            QTimer.singleShot(0, self, self._fit_initial_preview)
+        return super().eventFilter(watched, event)
 
-        self._preview_content_height = max(1, int(content_height + 12))
-        self.btn_toggle.setVisible(self._preview_content_height > 150)
+    def begin_preview_drag(self, pointer_y):
+        self._preview_sizing.begin_drag(self.view_panel.height(), pointer_y)
 
-        if self.btn_toggle.isChecked():
-            height = min(self._preview_content_height, 300)
-            if self.view_panel.height() != height:
-                self.view_panel.setFixedHeight(height)
-        elif not self.view_panel._preview_user_resized:
-            self._preview_default_height = min(self._preview_content_height, 150)
-            if self.view_panel.height() != self._preview_default_height:
-                self.view_panel.setFixedHeight(self._preview_default_height)
+    def move_preview_drag(self, pointer_y):
+        self._set_preview_height(self._preview_sizing.drag_to(pointer_y, *self._preview_geometry()))
+
+    def end_preview_drag(self):
+        self._preview_sizing.end_drag()
 
     def toggle_expansion(self):
-        if self.btn_toggle.isChecked():
-            height = min(max(150, self._preview_content_height), 300)
-            self.view_panel.setFixedHeight(height)
-            self.btn_toggle.setText("Ocultar" if IS_WINDOWS else "▲ Ocultar")
-            set_ui_icon(self.btn_toggle, "up")
-        else:
-            self.view_panel.setFixedHeight(self._preview_default_height or 150)
-            self.btn_toggle.setText("Ler enunciado" if IS_WINDOWS else "▼ Ler enunciado")
-            set_ui_icon(self.btn_toggle, "down")
+        expanded = self.btn_toggle.isChecked()
+        self._preview_sizing.toggle(expanded)
+        self._fit_initial_preview()
+        self.btn_toggle.setText(("Ocultar" if IS_WINDOWS else "▲ Ocultar") if expanded else
+                                ("Ler enunciado" if IS_WINDOWS else "▼ Ler enunciado"))
+        set_ui_icon(self.btn_toggle, "up" if expanded else "down")
 
 
 class VerticalResizeHandle(QWidget):
@@ -700,8 +727,8 @@ class VerticalResizeHandle(QWidget):
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self._start_y = event.globalPosition().toPoint().y()
-            if hasattr(self.owner, "_preview_user_resized"):
-                self.owner._preview_user_resized = True
+            if hasattr(self.owner, "_preview_card"):
+                self.owner._preview_card.begin_preview_drag(self._start_y)
             event.accept()
             return
         super().mousePressEvent(event)
@@ -709,16 +736,32 @@ class VerticalResizeHandle(QWidget):
     def mouseMoveEvent(self, event):
         if self._start_y is not None:
             current_y = event.globalPosition().toPoint().y()
-            delta = current_y - self._start_y
-            self.owner.setFixedHeight(max(self.owner._resize_minimum, self.owner.height() + delta))
-            self._start_y = current_y
+            if not event.buttons() & Qt.LeftButton:
+                self._end_drag()
+                return
+            if hasattr(self.owner, "_preview_card"):
+                self.owner._preview_card.move_preview_drag(current_y)
+            else:
+                delta = current_y - self._start_y
+                self.owner.setFixedHeight(legacy_drag_height(self.owner.height(), delta, self.owner._resize_minimum))
+                self._start_y = current_y
             event.accept()
             return
         super().mouseMoveEvent(event)
 
+    def _end_drag(self):
+        if self._start_y is not None and hasattr(self.owner, "_preview_card"):
+            self.owner._preview_card.end_preview_drag()
+        self._start_y = None
+
+    def event(self, event):
+        if event.type() in (QEvent.UngrabMouse, QEvent.Hide):
+            self._end_drag()
+        return super().event(event)
+
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
-            self._start_y = None
+            self._end_drag()
             event.accept()
             return
         super().mouseReleaseEvent(event)
@@ -2425,7 +2468,8 @@ class ExamGeneratorApp(QMainWindow):
                 card_html = "<html><body>" + "".join(content_parts) + "</body></html>"
                 card = QuestionCard(
                     q_id, sub, dif, year_label, q_type, card_html, is_checked, self.toggle_question_selection,
-                    question_source=question_source, source_year=question_source_year
+                    question_source=question_source, source_year=question_source_year,
+                    result_viewport=self.scroll_area.viewport()
                 )
                 card.checkbox.setStyle(self._selection_style)
                 cards.append(card)

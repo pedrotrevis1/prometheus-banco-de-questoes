@@ -1,6 +1,6 @@
 # Feature specification: Stable question-preview resizing
 
-**Folder**: `009-preview-resize` | **Status**: Draft | **Created**: 2026-11-16
+**Folder**: `009-preview-resize` | **Status**: In progress | **Created**: 2026-11-16
 **Fixes**: KD-19 | **Prerequisite**: 008 (planned execution sequence)
 **Plan**: [plan.md](plan.md) | **Tasks**: [tasks.md](tasks.md)
 

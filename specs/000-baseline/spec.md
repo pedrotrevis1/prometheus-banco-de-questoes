@@ -97,7 +97,8 @@ Data structures are in [data-model.md](data-model.md).
 - **BL-042** Each result is a card showing ID, segment and years, difficulty,
   type, categories, source and source year, and a preview of the statement
   with the alternatives (correct one highlighted) or the expected answer.
-  Long previews can be expanded and resized.
+  Long previews can be expanded and resized. Manual resizing is bounded by
+  the result viewport and survives document reflow; toggling resets the fit.
 - **BL-043** Each card has a "Selecionar" checkbox. A counter shows how many
   questions are selected for the exam. The selection is kept while filtering or changing pages
   and is lost when the bank is switched or the app is closed.
@@ -149,9 +150,8 @@ Data structures are in [data-model.md](data-model.md).
 | KD-14 | Exactly five alternatives are required | 005 |
 | KD-15 | Categories cannot be renamed or moved; names are globally unique | 005 |
 | KD-17 | Tables and lists in pasted content are flattened in the exam | Backlog |
-| KD-19 | Owner reports that dragging the resize corner of a question-card preview in tab 2 makes the interface appear to stretch downward; affected control confirmed, exact reproduction and root cause unverified | 009 (planned) |
 | KD-20 | An empty or multi-letter answer can pass validation when shuffling and then fail while remapping the answer key | Backlog |
 
 Planning note: spec 007 pagination is implemented with platform verification
 pending. Spec 008 source-year ranges are implemented with platform verification
-pending. Spec 009 preview-resize work remains proposed.
+pending. Spec 009 preview-resize work is implemented with manual platform checks pending.
