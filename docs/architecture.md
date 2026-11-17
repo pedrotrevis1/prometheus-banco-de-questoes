@@ -14,7 +14,9 @@ cover the safety workflow. Most UI and export code remains in the main window
 module. Search state and bounded queries live in `prometheus/domain/search.py`
 and `prometheus/storage/search.py`; the UI renders one page of at most 50
 question cards. `prometheus/domain/preview.py` holds preview resize policy;
-Qt widgets measure the viewport and apply the resulting geometry. Windows
+Qt widgets measure the viewport and apply the resulting geometry.
+`prometheus/export/` preflights images, constructs exams and answer keys, and
+publishes output files; ordering and version generation live in the domain. Windows
 verification remains pending.
 
 ## Target state

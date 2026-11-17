@@ -370,3 +370,182 @@ def test_edit_multiple_choice_preserves_answer_and_changes_type_only_on_save(win
     window.save_question()
     row = window.conn.execute('SELECT tipo, alternativa_a, alternativa_c, gabarito FROM questoes WHERE id=1').fetchone()
     assert row[:3] == ('Dissertativa', '', '') and 'Resposta alterada' in row[3]
+
+
+def test_keep_alternative_order_is_loaded_and_duplicated(window, monkeypatch):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QTreeWidgetItem
+    monkeypatch.setattr(window, 'show_alert', lambda *args: None)
+    monkeypatch.setattr(window, 'show_confirm', lambda *args: True)
+    QTreeWidgetItem(window.tree_register_subjects, ['Bio']).setCheckState(0, Qt.Unchecked)
+    window.conn.execute("UPDATE questoes SET tipo='Múltipla Escolha', ano_sugerido='1ª Série', segmento='Ensino Médio', alternativa_a='a', alternativa_b='b', alternativa_c='c', alternativa_d='d', alternativa_e='e', gabarito='C', keep_alternative_order=1 WHERE id=1")
+    window.conn.commit()
+    window.open_question_for_edit(1)
+    assert window.chk_keep_alternative_order.isChecked()
+    window.save_question()
+    assert window.conn.execute('SELECT keep_alternative_order FROM questoes WHERE id=1').fetchone()[0] == 1
+    window.open_question_for_edit(1, duplicate=True)
+    assert window.chk_keep_alternative_order.isChecked()
+    window.save_question()
+    assert window.conn.execute('SELECT keep_alternative_order FROM questoes ORDER BY id DESC LIMIT 1').fetchone()[0] == 1
+
+
+def test_generation_respects_user_order_and_separate_keys(window, tmp_path, monkeypatch):
+    from docx import Document
+    from PySide6.QtWidgets import QFileDialog
+    monkeypatch.setattr(window, 'show_confirm', lambda *args: True)
+    alerts = []
+    monkeypatch.setattr(window, 'show_alert', lambda title, text, *args: alerts.append((title, text)))
+    window.selected_ids.update({1, 2})
+    window.refresh_exam_order()
+    window.list_exam_order.setCurrentRow(1)
+    window.move_exam_question(-1)
+    window.chk_separate_answers.setChecked(True)
+    monkeypatch.setattr(QFileDialog, 'getSaveFileName', lambda *args, **kwargs: (str(tmp_path / 'Prova.docx'), ''))
+    window.generate_word_doc()
+    exam = Document(tmp_path / 'Prova.docx'); key = Document(tmp_path / 'Prova_Gabarito.docx')
+    exam_text = '\n'.join(p.text for p in exam.paragraphs)
+    assert exam_text.index('Questão 2') < exam_text.index('Questão 1')
+    assert 'Gabarito Oficial' not in exam_text
+    assert 'Gabarito Oficial' in '\n'.join(p.text for p in key.paragraphs)
+    assert alerts[-1][0] == 'Sucesso'
+
+
+def test_generation_warns_before_unexportable_image_and_can_cancel(window, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog
+    window.conn.execute("UPDATE questoes SET enunciado='<p>Texto</p><img src=\"https://example.com/no.png\">' WHERE id=1")
+    window.conn.commit(); window.selected_ids.add(1)
+    prompts = []
+    monkeypatch.setattr(window, 'show_confirm', lambda title, text: prompts.append((title, text)) or False)
+    monkeypatch.setattr(QFileDialog, 'getSaveFileName', lambda *args, **kwargs: (str(tmp_path / 'Prova.docx'), ''))
+    window.generate_word_doc()
+    assert prompts and '1' in prompts[-1][1]
+    assert not (tmp_path / 'Prova.docx').exists()
+
+
+def test_generation_does_not_overwrite_without_confirmation(window, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog
+    destination = tmp_path / 'Prova.docx'; destination.write_bytes(b'original')
+    window.selected_ids.add(1)
+    monkeypatch.setattr(window, 'show_confirm', lambda *args: False)
+    monkeypatch.setattr(QFileDialog, 'getSaveFileName', lambda *args, **kwargs: (str(destination), ''))
+    window.generate_word_doc()
+    assert destination.read_bytes() == b'original'
+
+
+def test_numbered_versions_and_separate_keys_match_shuffled_answers(window, tmp_path, monkeypatch):
+    from docx import Document
+    from PySide6.QtWidgets import QFileDialog
+    monkeypatch.setattr(window, 'show_confirm', lambda *args: True)
+    alerts = []
+    monkeypatch.setattr(window, 'show_alert', lambda title, text, *args: alerts.append((title, text)))
+    window.conn.execute("UPDATE questoes SET tipo='Múltipla Escolha', alternativa_a='alpha', alternativa_b='bravo', alternativa_c='charlie', alternativa_d='delta', alternativa_e='echo', gabarito='C' WHERE id=1")
+    window.conn.commit(); window.selected_ids.add(1)
+    window.chk_multiple_versions.setChecked(True)
+    window.chk_shuffle_alternatives.setChecked(True)
+    window.chk_separate_answers.setChecked(True)
+    monkeypatch.setattr(QFileDialog, 'getSaveFileName', lambda *args, **kwargs: (str(tmp_path / 'Prova.docx'), ''))
+    window.generate_word_doc()
+    printed = []
+    for number in (1, 2):
+        exam = Document(tmp_path / f'Prova_Versao_{number}.docx')
+        key = Document(tmp_path / f'Prova_Versao_{number}_Gabarito.docx')
+        exam_text = '\n'.join(p.text for p in exam.paragraphs)
+        key_text = '\n'.join(p.text for p in key.paragraphs)
+        assert f'Versão {number}' in exam_text and f'Versão {number}' in key_text
+        answer = next(letter for letter in 'ABCDE' if f'{letter}) charlie' in exam_text)
+        assert f'1) {answer}' in key_text
+        printed.append(exam_text.replace(f'Versão {number}', 'Versão'))
+    assert printed[0] != printed[1]
+    assert alerts[-1][0] == 'Sucesso'
+
+
+def test_user_can_continue_after_warning_for_unexportable_image(window, tmp_path, monkeypatch):
+    from docx import Document
+    from PySide6.QtWidgets import QFileDialog
+    window.conn.execute("UPDATE questoes SET enunciado='<p>Texto preservado</p><img src=\"https://example.com/no.png\">' WHERE id=1")
+    window.conn.commit(); window.selected_ids.add(1)
+    prompts = []; alerts = []
+    monkeypatch.setattr(window, 'show_confirm', lambda title, text: prompts.append((title, text)) or True)
+    monkeypatch.setattr(window, 'show_alert', lambda title, text, *args: alerts.append((title, text)))
+    monkeypatch.setattr(QFileDialog, 'getSaveFileName', lambda *args, **kwargs: (str(tmp_path / 'Prova.docx'), ''))
+    window.generate_word_doc()
+    assert prompts and 'Questão 1' in prompts[0][1]
+    assert alerts[-1][0] == 'Sucesso'
+    exam = Document(tmp_path / 'Prova.docx')
+    assert 'Texto preservado' in '\n'.join(p.text for p in exam.paragraphs)
+    assert len(exam.inline_shapes) == 0
+
+
+def test_protected_question_keeps_alternatives_across_versions(window, tmp_path, monkeypatch):
+    from docx import Document
+    from PySide6.QtWidgets import QFileDialog
+    monkeypatch.setattr(window, 'show_confirm', lambda *args: True)
+    monkeypatch.setattr(window, 'show_alert', lambda *args: None)
+    window.conn.execute("UPDATE questoes SET tipo='Múltipla Escolha', alternativa_a='alpha', alternativa_b='bravo', alternativa_c='charlie', alternativa_d='delta', alternativa_e='echo', gabarito='C', keep_alternative_order=1 WHERE id=1")
+    window.conn.execute("UPDATE questoes SET tipo='Múltipla Escolha', alternativa_a='one', alternativa_b='two', alternativa_c='three', alternativa_d='four', alternativa_e='five', gabarito='B' WHERE id=2")
+    window.conn.commit(); window.selected_ids.update({1, 2})
+    window.chk_multiple_versions.setChecked(True); window.chk_shuffle_alternatives.setChecked(True)
+    monkeypatch.setattr(QFileDialog, 'getSaveFileName', lambda *args, **kwargs: (str(tmp_path / 'Prova.docx'), ''))
+    window.generate_word_doc()
+    for number in (1, 2):
+        doc = Document(tmp_path / f'Prova_Versao_{number}.docx')
+        text = '\n'.join(p.text for p in doc.paragraphs)
+        assert all(f'{letter}) {value}' in text for letter, value in zip('ABCDE', ('alpha', 'bravo', 'charlie', 'delta', 'echo')))
+
+
+def test_visually_identical_shuffled_versions_are_not_published(window, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog
+    alerts = []
+    monkeypatch.setattr(window, 'show_alert', lambda title, text, *args: alerts.append((title, text)))
+    monkeypatch.setattr(window, 'show_confirm', lambda *args: True)
+    window.conn.execute("UPDATE questoes SET enunciado='<p><b>igual</b></p>' WHERE id=1")
+    window.conn.execute("UPDATE questoes SET enunciado='<p><strong>igual</strong></p>' WHERE id=2")
+    window.conn.commit(); window.selected_ids.update({1, 2})
+    window.chk_multiple_versions.setChecked(True); window.chk_shuffle_questions.setChecked(True)
+    monkeypatch.setattr(QFileDialog, 'getSaveFileName', lambda *args, **kwargs: (str(tmp_path / 'Prova.docx'), ''))
+    window.generate_word_doc()
+    assert alerts and 'distinta' in alerts[-1][1].lower()
+    assert not list(tmp_path.glob('Prova*.docx'))
+
+
+def test_dropped_color_and_run_boundaries_do_not_make_versions_distinct(window, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog
+    alerts = []
+    monkeypatch.setattr(window, 'show_alert', lambda title, text, *args: alerts.append((title, text)))
+    monkeypatch.setattr(window, 'show_confirm', lambda *args: True)
+    window.conn.execute("UPDATE questoes SET tipo='Dissertativa', enunciado='<p>AB</p>' WHERE id=1")
+    window.conn.execute("UPDATE questoes SET tipo='Dissertativa', enunciado='<p>A<span style=\"color:red\">B</span></p>' WHERE id=2")
+    window.conn.commit(); window.selected_ids.update({1, 2})
+    window.chk_multiple_versions.setChecked(True); window.chk_shuffle_questions.setChecked(True)
+    monkeypatch.setattr(QFileDialog, 'getSaveFileName', lambda *args, **kwargs: (str(tmp_path / 'Prova.docx'), ''))
+    window.generate_word_doc()
+    assert alerts and 'distint' in alerts[-1][1].lower()
+    assert not list(tmp_path.glob('*.docx'))
+
+
+def test_existing_answer_key_requires_confirmation_before_any_output(window, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog
+    existing = tmp_path / 'Prova_Gabarito.docx'; existing.write_bytes(b'original')
+    window.selected_ids.add(1); window.chk_separate_answers.setChecked(True)
+    prompts = []
+    monkeypatch.setattr(window, 'show_confirm', lambda title, text: prompts.append(text) or False)
+    monkeypatch.setattr(QFileDialog, 'getSaveFileName', lambda *args, **kwargs: (str(tmp_path / 'Prova.docx'), ''))
+    window.generate_word_doc()
+    assert prompts and str(existing) in prompts[-1]
+    assert existing.read_bytes() == b'original'
+    assert not (tmp_path / 'Prova.docx').exists()
+
+
+def test_impossible_protected_versions_warn_before_output(window, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog
+    alerts = []
+    monkeypatch.setattr(window, 'show_alert', lambda title, text, *args: alerts.append(text))
+    monkeypatch.setattr(window, 'show_confirm', lambda *args: True)
+    window.conn.execute("UPDATE questoes SET tipo='Múltipla Escolha', alternativa_a='a', alternativa_b='b', alternativa_c='c', alternativa_d='d', alternativa_e='e', gabarito='C', keep_alternative_order=1 WHERE id=1")
+    window.conn.commit(); window.selected_ids.add(1)
+    window.chk_multiple_versions.setChecked(True); window.chk_shuffle_alternatives.setChecked(True)
+    monkeypatch.setattr(QFileDialog, 'getSaveFileName', lambda *args, **kwargs: (str(tmp_path/'Prova.docx'), ''))
+    window.generate_word_doc()
+    assert alerts and 'distint' in alerts[-1].lower()
+    assert not list(tmp_path.glob('Prova*.docx'))

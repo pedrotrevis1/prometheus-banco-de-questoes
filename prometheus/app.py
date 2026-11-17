@@ -1,3 +1,10 @@
+from prometheus.domain.exam_order import ExamOrder
+from prometheus.domain.versions import generate_versions
+from prometheus.storage.exams import fetch_ordered_questions, fetch_question_summaries
+from prometheus.export.documents import build_exam_documents, exam_content_fingerprint
+from prometheus.export.files import output_paths, publish_documents, PublicationError
+from prometheus.export.images import inspect_question_images
+from prometheus.export.images import embed_html_images, clipboard_image_data, ImageReadError
 from prometheus.domain.questions import (RichContent, QuestionDraft, QuestionValidationError,
     QuestionSession, format_last_modified, split_available_categories, stored_school_years, validate_question)
 from prometheus.storage.questions import get_question, insert_question, update_question
@@ -19,27 +26,18 @@ from datetime import datetime
 import os
 import sqlite3
 import platform  # <--- Este é o import que estava faltando
-import io
-import re
-import html
-import random
-import itertools
-import math
-import tempfile
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QFileDialog, QTabWidget,
     QComboBox, QTextEdit, QCheckBox, QMessageBox, QScrollArea,
     QFrame, QButtonGroup, QSizePolicy, QStyledItemDelegate, QListView,
-    QTreeWidget, QTreeWidgetItem, QDialog, QFormLayout, QToolButton, QInputDialog,
+    QTreeWidget, QTreeWidgetItem, QListWidget, QDialog, QFormLayout, QToolButton, QInputDialog,
     QRadioButton, QGridLayout, QProxyStyle, QStyle, QHeaderView, QStyleFactory, QSpinBox,
     QStyleOptionComboBox, QStyleOptionSpinBox
 )
-from PySide6.QtCore import Qt, QByteArray, QBuffer, QIODevice, QPoint, QPointF, QRectF, QSize, QTimer, QEvent
-from PySide6.QtGui import QFont, QPalette, QIcon, QIconEngine, QTextDocument, QTextImageFormat, QImage, QPixmap, QTextCharFormat, QTextCursor, QPainter, QPen, QPolygon, QPainterPath, QColor
-from docx import Document
-from docx.shared import Inches, Pt
+from PySide6.QtCore import Qt, QByteArray, QBuffer, QIODevice, QPoint, QPointF, QRectF, QSize, QTimer, QEvent, QMimeData
+from PySide6.QtGui import QFont, QPalette, QIcon, QIconEngine, QTextImageFormat, QImage, QPixmap, QTextCharFormat, QTextCursor, QPainter, QPen, QPolygon, QPainterPath, QColor
 
 APP_NAME = "Prometheus - Banco de Questões"
 from prometheus import __version__
@@ -811,6 +809,20 @@ class ResizableTextEdit(VerticalResizeMixin, QTextEdit):
 
 class ClipboardRichTextEdit(ResizableTextEdit):
     def insertFromMimeData(self, source):
+        if source.hasHtml():
+            fallback = None
+            if source.hasImage():
+                try:
+                    fallback = clipboard_image_data(source.imageData())
+                except ImageReadError:
+                    QMessageBox.warning(self, "Imagem não incorporada", "Não foi possível ler a imagem copiada.")
+            prepared, issues = embed_html_images(source.html(), fallback_image=fallback)
+            if issues:
+                QMessageBox.warning(self, "Imagens não incorporadas", "Não foi possível incorporar as seguintes imagens:\n" + "\n".join(item[:200] or "(sem endereço)" for item in issues))
+            safe_source = QMimeData()
+            safe_source.setHtml(prepared)
+            super().insertFromMimeData(safe_source)
+            return
         if source.hasImage() and not source.hasHtml():
             image = QImage(source.imageData())
             if not image.isNull():
@@ -827,6 +839,8 @@ class ClipboardRichTextEdit(ResizableTextEdit):
                 image_format.setHeight(image.height())
                 self.textCursor().insertImage(image_format)
                 return
+            QMessageBox.warning(self, "Imagem não incorporada", "Não foi possível ler a imagem copiada.")
+            return
         super().insertFromMimeData(source)
 
 
@@ -951,6 +965,7 @@ class ExamGeneratorApp(QMainWindow):
         self._selection_style = QApplication.style() if IS_WINDOWS else AccessibleSelectionStyle(QStyleFactory.create("Fusion"))
         self.conn = None
         self.search_view = SearchViewState()
+        self.exam_order = ExamOrder()
         self.selected_ids = self.search_view.selected_ids
         self.question_session = None
         first_run = not os.path.exists(os.path.join(self.get_data_dir(), "app_config.json"))
@@ -1057,6 +1072,7 @@ class ExamGeneratorApp(QMainWindow):
         database_name = os.path.splitext(os.path.basename(self.db_path))[0] or self.current_discipline
         self.setWindowTitle(f"{APP_NAME} — {database_name}")
         self.selected_ids.clear()
+        self.exam_order.synchronize(self.selected_ids)
         self.search_view.set_selected_only(False)
         if hasattr(self, "lbl_selected_count"):
             self.lbl_selected_count.setText("0 questão(ões) selecionada(s) para a prova")
@@ -1133,7 +1149,7 @@ class ExamGeneratorApp(QMainWindow):
         <h3>2. Buscar e Selecionar Questões</h3>
         <p>Use os filtros de categoria, texto, fonte da questão, ano da fonte, dificuldade, ano/série escolar e tipo; depois clique em <b>Filtrar Questões</b>. A fonte pode ser buscada por parte do nome. Para o ano da fonte, use <b>Desde</b> para incluir esse ano e os seguintes, <b>até</b> para incluir esse ano e os anteriores, ou ambos para limitar o intervalo. Por exemplo: Desde 2022; até 2024; ou Desde 2022 até 2024. Use o mesmo ano nos dois campos para buscar um ano numérico exato. Deixe os campos vazios para buscar sem essas restrições. Abra os cartões para revisar enunciados, alternativas e respostas. Marque <b>Selecionar</b> nas questões que entrarão na prova. Os resultados aparecem em páginas de até 50 questões; use <b>Anterior</b>, <b>Próxima</b> ou o número da página para navegar. A seleção permanece ao trocar de página ou filtro. Use <b>Navegar pelas questões selecionadas</b> para ver apenas essas questões. A exclusão de questões selecionadas inclui também as seleções que não estão visíveis na página atual.</p>
         <h3>3. Configurar e Gerar Prova</h3>
-        <p>Depois de selecionar questões na aba anterior, escolha se deseja incluir o gabarito. Para criar versões diferentes, ative <b>Gerar múltiplas versões</b>, informe a quantidade e escolha se deseja embaralhar questões e alternativas. A opção de embaralhar alternativas fica disponível quando há questões de múltipla escolha selecionadas. Clique em <b>Gerar Arquivo da Prova</b> e escolha onde salvar os arquivos Word.</p>
+        <p>Depois de selecionar questões, use <b>Subir</b> e <b>Descer</b> para definir a ordem. Escolha se deseja incluir o gabarito ao final ou em arquivo separado. Para versões diferentes, ative <b>Gerar múltiplas versões</b> e escolha o embaralhamento. Questões marcadas para manter a ordem não têm suas alternativas embaralhadas. As versões recebem números e arquivos com <b>_Versao_</b> no nome. Se alguma imagem não puder ser exportada, o aplicativo informa a questão antes de salvar. Os arquivos não incluem cabeçalho escolar: copie as questões para o modelo da escola.</p>
         """
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle("Ajuda")
@@ -1334,6 +1350,7 @@ class ExamGeneratorApp(QMainWindow):
         self.setup_tab_register()
         self.setup_tab_search()
         self.setup_tab_generate()
+        self.tabs.currentChanged.connect(self.on_exam_tab_changed)
 
         content_layout.addWidget(self.tabs)
         
@@ -1487,6 +1504,7 @@ class ExamGeneratorApp(QMainWindow):
                 self.conn = None
             self.current_discipline, self.db_path = '', ''
             self.selected_ids.clear()
+            self.exam_order.synchronize(self.selected_ids)
             self.lbl_selected_count.setText("0 questão(ões) selecionada(s) para a prova")
             self.btn_delete_selected_questions.setEnabled(False)
             self.btn_browse_selected_questions.setEnabled(False)
@@ -1694,6 +1712,9 @@ class ExamGeneratorApp(QMainWindow):
             row1.addWidget(radio)
         self.diff_radios["Médio"].setChecked(True)
         left_col.addLayout(row1)
+        self.chk_keep_alternative_order = QCheckBox("Manter a ordem das alternativas")
+        self.chk_keep_alternative_order.setToolTip("Não embaralhar as alternativas desta questão ao gerar versões.")
+        left_col.addWidget(self.chk_keep_alternative_order)
 
         left_col.addWidget(QLabel("Segmento:"))
         segment_layout = QHBoxLayout()
@@ -2058,6 +2079,8 @@ class ExamGeneratorApp(QMainWindow):
         return checked_names
 
     def toggle_question_type(self, q_type):
+        if hasattr(self, 'chk_keep_alternative_order'):
+            self.chk_keep_alternative_order.setEnabled(q_type == "Múltipla Escolha")
         if q_type == "Múltipla Escolha":
             self.alts_divider.setVisible(True)
             self.alts_header.setVisible(True)
@@ -2151,6 +2174,7 @@ class ExamGeneratorApp(QMainWindow):
             answer=chr(self.alt_radios.id(checked)) if checked else '',
             essay_answer=content(self.txt_essay_answer),
             source=self.txt_question_source.text(), source_year=self.txt_source_year.text(),
+            keep_alternative_order=self.chk_keep_alternative_order.isChecked(),
         )
 
     def save_question(self):
@@ -2234,6 +2258,7 @@ class ExamGeneratorApp(QMainWindow):
                 checkbox.setChecked(label in years)
             self.txt_question_source.setText(row['fonte_questao'] or '')
             self.txt_source_year.setText(row['ano_origem'] or '')
+            self.chk_keep_alternative_order.setChecked(bool(row['keep_alternative_order']))
             self.txt_prompt.setHtml(row['enunciado'] or '')
             for letter, editor in self.alt_inputs.items():
                 editor.setHtml(row[f'alternativa_{letter.lower()}'] or '')
@@ -2271,6 +2296,7 @@ class ExamGeneratorApp(QMainWindow):
             self.show_alert("Erro", f"Não foi possível carregar a questão: {e}", QMessageBox.Critical)
 
     def clear_register_form(self):
+        self.chk_keep_alternative_order.setChecked(False)
         self.txt_question_source.clear()
         self.txt_source_year.clear()
         self.txt_prompt.clear()
@@ -2653,6 +2679,7 @@ class ExamGeneratorApp(QMainWindow):
             self.selected_ids.add(q_id)
         else:
             self.selected_ids.discard(q_id)
+            self.exam_order.synchronize(self.selected_ids)
         self.lbl_selected_count.setText(f"{len(self.selected_ids)} questão(ões) selecionada(s) para a prova")
         self.btn_delete_selected_questions.setEnabled(bool(self.selected_ids))
         selected_view = self.btn_browse_selected_questions.isChecked()
@@ -2686,6 +2713,7 @@ class ExamGeneratorApp(QMainWindow):
             deleted_count = cursor.rowcount
             self.conn.commit()
             self.selected_ids.difference_update(question_ids)
+            self.exam_order.synchronize(self.selected_ids)
             self.lbl_selected_count.setText(f"{len(self.selected_ids)} questão(ões) selecionada(s) para a prova")
             self.btn_delete_selected_questions.setEnabled(bool(self.selected_ids))
             selected_view = self.btn_browse_selected_questions.isChecked()
@@ -2761,7 +2789,25 @@ class ExamGeneratorApp(QMainWindow):
         self.chk_include_answers = QCheckBox("Incluir gabarito oficial em página separada no final do documento?")
         self.chk_include_answers.setChecked(True)
         config_layout.addWidget(self.chk_include_answers)
-        
+        self.chk_separate_answers = QCheckBox("Gabarito em arquivo separado")
+        self.chk_include_answers.toggled.connect(self.chk_separate_answers.setEnabled)
+        config_layout.addWidget(self.chk_separate_answers)
+        add_generation_divider()
+        order_label = QLabel("Ordem das questões selecionadas:")
+        config_layout.addWidget(order_label)
+        self.list_exam_order = QListWidget()
+        self.list_exam_order.setMinimumHeight(100)
+        self.list_exam_order.setMaximumHeight(180)
+        config_layout.addWidget(self.list_exam_order)
+        order_buttons = QHBoxLayout()
+        self.btn_order_up = QPushButton("Subir")
+        self.btn_order_up.clicked.connect(lambda: self.move_exam_question(-1))
+        self.btn_order_down = QPushButton("Descer")
+        self.btn_order_down.clicked.connect(lambda: self.move_exam_question(1))
+        order_buttons.addWidget(self.btn_order_up); order_buttons.addWidget(self.btn_order_down)
+        order_buttons.addStretch()
+        config_layout.addLayout(order_buttons)
+
         content_layout.addWidget(config_frame)
 
         btn_generate = QPushButton("Gerar Arquivo da Prova")
@@ -2776,9 +2822,10 @@ class ExamGeneratorApp(QMainWindow):
         generate_row.addStretch()
         content_layout.addLayout(generate_row)
 
-        layout.addStretch()
-        layout.addWidget(content, alignment=Qt.AlignHCenter)
-        layout.addStretch()
+        generation_scroll = QScrollArea()
+        generation_scroll.setWidgetResizable(True)
+        generation_scroll.setWidget(content)
+        layout.addWidget(generation_scroll)
         self.tabs.addTab(tab, "Configurar e Gerar Prova")
 
     def update_multi_version_controls(self, *_):
@@ -2796,243 +2843,96 @@ class ExamGeneratorApp(QMainWindow):
     def make_version_questions(source_questions, shuffle_questions, shuffle_alternatives):
         return make_version_questions(source_questions, shuffle_questions, shuffle_alternatives)
 
-    def insert_html_to_docx(self, doc, prefix_text, html_str):
-        p = doc.add_paragraph()
-        if prefix_text:
-            run_prefix = p.add_run(prefix_text)
-            run_prefix.bold = True
-            run_prefix.font.size = Pt(12)
+    def on_exam_tab_changed(self, index):
+        if index == 2:
+            self.refresh_exam_order()
 
-        html_str = html_str or ""
-        if not re.search(r"<(?:!doctype|/?html|/?body|/?p|/?div|/?span|/?br|/?img|/?b|/?strong|/?i|/?em|/?u|/?sup|/?sub)\b", html_str, re.IGNORECASE):
-            html_str = html.escape(html_str).replace("\n", "<br>")
+    def refresh_exam_order(self):
+        ids = self.exam_order.synchronize(self.selected_ids)
+        try:
+            summaries = fetch_question_summaries(self.conn, ids) if self.conn and ids else {}
+        except Exception as e:
+            self.show_alert("Erro", f"Não foi possível carregar as questões selecionadas: {e}", QMessageBox.Warning)
+            return
+        self.list_exam_order.clear()
+        for question_id in ids:
+            summary = summaries.get(question_id, '')
+            self.list_exam_order.addItem(f"Questão {question_id}" + (f" — {summary}" if summary else ""))
+        if ids:
+            self.list_exam_order.setCurrentRow(0)
 
-        q_doc = QTextDocument()
-        q_doc.setHtml(html_str)
-        
-        block = q_doc.begin()
-        while block.isValid():
-            iterator = block.begin()
-            while not iterator.atEnd():
-                fragment = iterator.fragment()
-                if fragment.isValid():
-                    char_format = fragment.charFormat()
-                    
-                    if char_format.isImageFormat():
-                        img_format = char_format.toImageFormat()
-                        img_name = img_format.name()
-                        
-                        if img_name.startswith("data:image/png;base64,"):
-                            try:
-                                b64_raw = img_name.split("base64,")[1]
-                                img_bytes = ba = QByteArray.fromBase64(b64_raw.encode("utf-8")).data()
-                                image_stream = io.BytesIO(img_bytes)
-                                
-                                doc.add_picture(image_stream, width=Inches(4.5))
-                                p = doc.add_paragraph()
-                            except Exception as e:
-                                raise ValueError("Não foi possível inserir uma imagem incorporada no documento.") from e
-                    else:
-                        text = fragment.text()
-                        if text:
-                            run = p.add_run(text)
-                            run.font.name = 'Arial'
-                            run.font.size = Pt(12)
-                            run.bold = char_format.fontWeight() == QFont.Bold
-                            run.italic = char_format.fontItalic()
-                            run.underline = char_format.fontUnderline()
-                            run.font.strike = char_format.fontStrikeOut()
-                            vertical_alignment = char_format.verticalAlignment()
-                            run.font.superscript = vertical_alignment == QTextCharFormat.AlignSuperScript
-                            run.font.subscript = vertical_alignment == QTextCharFormat.AlignSubScript
-                            if char_format.fontPointSize() > 0:
-                                run.font.size = Pt(char_format.fontPointSize())
-                            
-                iterator += 1
-            
-            block = block.next()
-            if block.isValid():
-                p = doc.add_paragraph()
+    def move_exam_question(self, delta):
+        row = self.list_exam_order.currentRow()
+        target = self.exam_order.move(row, delta)
+        if target != row:
+            item = self.list_exam_order.takeItem(row)
+            self.list_exam_order.insertItem(target, item)
+            self.list_exam_order.setCurrentRow(target)
 
     def build_exam_document(self, questions):
-        doc = Document()
-
-        for idx, question in enumerate(questions, start=1):
-            question_type = question[3]
-            self.insert_html_to_docx(doc, f"{idx}) ", question[4])
-
-            if question_type == "Múltipla Escolha":
-                for letter, alternative in zip("ABCDE", question[5:10]):
-                    self.insert_html_to_docx(doc, f"{letter}) ", alternative or "")
-
-            doc.add_paragraph("")
-
-        if self.chk_include_answers.isChecked():
-            doc.add_page_break()
-            doc.add_heading("Gabarito Oficial", level=1)
-
-            for idx, question in enumerate(questions, start=1):
-                question_type = question[3]
-                answer = question[10]
-                if question_type == "Múltipla Escolha":
-                    p_answer = doc.add_paragraph()
-                    p_answer.add_run(f"{idx}) ").bold = True
-                    p_answer.add_run(str(answer or ""))
-                elif answer and answer.strip():
-                    self.insert_html_to_docx(doc, f"{idx}) Resolução Esperada:\n", answer)
-                else:
-                    p_answer = doc.add_paragraph()
-                    p_answer.add_run(f"{idx}) Resolução Esperada: ").bold = True
-                    p_answer.add_run("Sem resolução cadastrada no sistema.")
-
-        return doc
+        placement = 'end' if self.chk_include_answers.isChecked() else 'none'
+        return build_exam_documents(questions, answer_placement=placement)[0]
 
     def generate_word_doc(self):
         if not self.selected_ids:
             self.show_alert("Aviso", "Nenhuma questão selecionada! Vá para a aba de busca e selecione questões primeiro.", QMessageBox.Warning)
             return
-
-        multiple_versions = self.chk_multiple_versions.isChecked()
-        version_count = self.spin_version_count.value()
-        if multiple_versions and not 2 <= version_count <= 999:
-            self.show_alert("Aviso", "O número de versões deve estar entre 2 e 999.", QMessageBox.Warning)
-            return
-
         self.btn_generate.setEnabled(False)
-        temporary_paths = []
-        generated_paths = []
-        output_paths = []
+        targets = []
         try:
+            ordered_ids = self.exam_order.synchronize(self.selected_ids)
+            questions = fetch_ordered_questions(self.conn, ordered_ids)
+            multiple = self.chk_multiple_versions.isChecked()
+            count = self.spin_version_count.value() if multiple else 1
+            placement = ('none' if not self.chk_include_answers.isChecked() else
+                         'separate' if self.chk_separate_answers.isChecked() else 'end')
+            versions = generate_versions(questions, count,
+                multiple and self.chk_shuffle_questions.isChecked(),
+                multiple and self.chk_shuffle_alternatives.isChecked())
+            issues = inspect_question_images(questions, include_answers=placement != 'none')
+            acknowledged = set()
+            if issues:
+                details = sorted({(issue.question_id, issue.reason) for issue in issues})
+                message = "Algumas imagens não podem ser exportadas:\n\n" + "\n".join(
+                    f"Questão {question_id}: {reason}" for question_id, reason in details)
+                if not self.show_confirm("Imagens não exportáveis", message + "\n\nContinuar sem essas imagens?"):
+                    return
+                acknowledged = {(issue.question_id, issue.source) for issue in issues}
             file_path, _ = QFileDialog.getSaveFileName(
-                self, "Salvar Prova", f"Prova_{self.current_discipline}.docx", "Word Document (*.docx)"
-            )
+                self, "Salvar Prova", f"Prova_{self.current_discipline}.docx", "Word Document (*.docx)")
             if not file_path:
                 return
-
-            if not multiple_versions:
-                _, extension = os.path.splitext(file_path)
-                if not extension:
-                    file_path += ".docx"
-                elif extension.lower() != ".docx":
-                    self.show_alert("Formato inválido", "A geração de provas suporta somente arquivos .docx.", QMessageBox.Warning)
-                    return
-
-            cursor = self.conn.cursor()
-            question_ids = sorted(self.selected_ids)
-            placeholders = ",".join("?" for _ in question_ids)
-            query = f"SELECT * FROM questoes WHERE id IN ({placeholders}) ORDER BY id ASC"
-            cursor.execute(query, question_ids)
-            questions = cursor.fetchall()
-            if not questions:
-                self.show_alert("Aviso", "As questões selecionadas não foram encontradas no banco de dados.", QMessageBox.Warning)
+            paths = output_paths(file_path, count, placement)
+            targets = [path for pair in paths for path in pair if path is not None]
+            existing = [path for path in targets if path.exists()]
+            if existing and not self.show_confirm("Confirmar substituição de arquivos",
+                    "Os arquivos a seguir já existem e serão substituídos:\n\n" + "\n".join(map(str, existing))):
                 return
-
-            if multiple_versions:
-                if self.chk_shuffle_questions.isChecked():
-                    possible_orders = math.factorial(len(questions))
-                    if version_count > possible_orders:
-                        self.show_alert(
-                            "Versões únicas indisponíveis",
-                            f"Com {len(questions)} questão(ões), existem apenas {possible_orders} ordem(ns) distinta(s). "
-                            f"Reduza o número de versões para no máximo {possible_orders}.",
-                            QMessageBox.Warning
-                        )
-                        return
-
-                base, extension = os.path.splitext(file_path)
-                if not extension:
-                    extension = ".docx"
-                    base = file_path
-                elif extension.lower() != ".docx":
-                    self.show_alert("Formato inválido", "A geração de provas suporta somente arquivos .docx.", QMessageBox.Warning)
-                    return
-                output_paths = [f"{base}_Version_{number}{extension}" for number in range(1, version_count + 1)]
-                existing_paths = [path for path in output_paths if os.path.exists(path)]
-                if existing_paths and not self.show_confirm(
-                    "Confirmar substituição de arquivos",
-                    "Os arquivos a seguir já existem e serão substituídos:\n\n" + "\n".join(existing_paths)
-                ):
-                    return
-
-                version_question_sets = []
-                shuffle_alternatives = (
-                    self.chk_shuffle_alternatives.isChecked()
-                    and any(question[3] == "Múltipla Escolha" for question in questions)
-                )
-                if self.chk_shuffle_questions.isChecked():
-                    seen_orders = set()
-                    base_order = tuple(question[0] for question in questions)
-                    attempts = 0
-                    while len(seen_orders) < version_count and attempts < version_count * 20:
-                        order = list(base_order)
-                        random.shuffle(order)
-                        seen_orders.add(tuple(order))
-                        attempts += 1
-                    if len(seen_orders) < version_count:
-                        for order in itertools.permutations(base_order):
-                            seen_orders.add(order)
-                            if len(seen_orders) == version_count:
-                                break
-                    orders = list(seen_orders)
-                    random.shuffle(orders)
-                    questions_by_id = {question[0]: question for question in questions}
-                    version_question_sets = [
-                        self.make_version_questions(
-                            [questions_by_id[question_id] for question_id in order],
-                            False,
-                            shuffle_alternatives
-                        )
-                        for order in orders
-                    ]
-                else:
-                    version_question_sets = [
-                        self.make_version_questions(questions, False, shuffle_alternatives)
-                        for _ in range(version_count)
-                    ]
-
-                for version_questions, output_path in zip(version_question_sets, output_paths):
-                    document = self.build_exam_document(version_questions)
-                    file_descriptor, temporary_path = tempfile.mkstemp(
-                        prefix=".exam_", suffix=".docx", dir=os.path.dirname(output_path) or "."
-                    )
-                    os.close(file_descriptor)
-                    temporary_paths.append(temporary_path)
-                    document.save(temporary_path)
-
-                for temporary_path, output_path in zip(temporary_paths, output_paths):
-                    os.replace(temporary_path, output_path)
-                    generated_paths.append(output_path)
-                temporary_paths.clear()
-                self.show_alert("Sucesso", f"{len(generated_paths)} versões salvas:\n" + "\n".join(generated_paths), QMessageBox.Information)
-            else:
-                document = self.build_exam_document([list(question) for question in questions])
-                file_descriptor, temporary_path = tempfile.mkstemp(
-                    prefix=".exam_", suffix=".docx", dir=os.path.dirname(file_path) or "."
-                )
-                os.close(file_descriptor)
-                temporary_paths.append(temporary_path)
-                document.save(temporary_path)
-                os.replace(temporary_path, file_path)
-                temporary_paths.clear()
-                self.show_alert("Sucesso", f"Prova salva com sucesso em:\n{file_path}", QMessageBox.Information)
+            def documents():
+                rendered_versions = set()
+                for number, (version, pair) in enumerate(zip(versions, paths), start=1):
+                    exam, answer = build_exam_documents(version,
+                        version_number=number if multiple else None,
+                        answer_placement=placement, acknowledged_images=acknowledged)
+                    if multiple and (self.chk_shuffle_questions.isChecked() or self.chk_shuffle_alternatives.isChecked()):
+                        signature = exam_content_fingerprint(exam, version_number=number)
+                        if signature in rendered_versions:
+                            raise ValueError("Não foi possível gerar versões visualmente distintas com as opções escolhidas.")
+                        rendered_versions.add(signature)
+                    yield pair[0], exam
+                    if answer is not None:
+                        yield pair[1], answer
+            written = publish_documents(documents(), confirmed=existing)
+            self.show_alert("Sucesso", "Arquivos salvos:\n" + "\n".join(map(str, written)), QMessageBox.Information)
+        except PublicationError as e:
+            message = f"Não foi possível concluir a geração: {e}"
+            if e.published:
+                message += "\n\nArquivos salvos:\n" + "\n".join(map(str, e.published))
+                missing = [path for path in targets if path not in e.published]
+                if missing:
+                    message += "\n\nArquivos não salvos:\n" + "\n".join(map(str, missing))
+            self.show_alert("Erro ao gerar documentos", message, QMessageBox.Warning)
         except Exception as e:
-            if multiple_versions and output_paths:
-                failed_paths = [path for path in output_paths if path not in generated_paths]
-                message = (
-                    f"Falha ao concluir a geração: {str(e)}\n\n"
-                    "Versões salvas:\n" + ("\n".join(generated_paths) if generated_paths else "Nenhuma")
-                )
-                if failed_paths:
-                    message += "\n\nVersões não salvas:\n" + "\n".join(failed_paths)
-                title = "Geração parcial" if generated_paths else "Erro ao Gerar Versões"
-                self.show_alert(title, message, QMessageBox.Warning if generated_paths else QMessageBox.Critical)
-            else:
-                self.show_alert("Erro ao Gerar Documento", f"Falha ao gerar arquivo:\n{str(e)}", QMessageBox.Critical)
+            self.show_alert("Erro ao gerar documentos", f"Não foi possível gerar a prova: {e}", QMessageBox.Critical)
         finally:
-            try:
-                for temporary_path in temporary_paths:
-                    if os.path.exists(temporary_path):
-                        os.remove(temporary_path)
-            finally:
-                self.btn_generate.setEnabled(True)
-
+            self.btn_generate.setEnabled(True)

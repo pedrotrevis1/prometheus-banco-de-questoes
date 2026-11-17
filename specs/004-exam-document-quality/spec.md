@@ -1,13 +1,14 @@
 # Feature specification: Exam document quality
 
-**Folder**: `004-exam-document-quality` | **Status**: Draft | **Created**: 2026-11-14
-**Fixes**: KD-08, KD-09, KD-10, KD-11 | **Plan**: to be written when this iteration starts
+**Folder**: `004-exam-document-quality` | **Status**: In progress | **Created**: 2026-11-14
+**Fixes**: KD-08, KD-09, KD-10, KD-11 | **Plan**: [plan.md](plan.md) | **Tasks**: [tasks.md](tasks.md)
 
 ## Why
 
 The generated Word file is the product the teacher actually hands to students.
-Today it has no header, printed versions cannot be told apart, some images
-disappear without warning, and the question order is fixed by database ID.
+Printed versions cannot be told apart, some images disappear without warning,
+and the question order is fixed by database ID. The resulting file is intended
+for copying into the school’s own template, not for adding a school header.
 
 ## User stories
 
@@ -21,17 +22,11 @@ disappear without warning, and the question order is fixed by database ID.
 2. **Given** a single version, **when** it is generated, **then** no version
    label is shown.
 
-### US2 — The exam has a proper header (P1)
+### US2 — Use the school's own template (P1)
 
-**Acceptance scenarios**
-
-1. **Given** the generation tab, **when** I fill in school, teacher, subject,
-   class, date, exam title and instructions, **then** the document starts with
-   them, followed by lines for the student's name and number.
-2. **Given** I generated an exam before, **when** I return to the tab, **then**
-   school, teacher and instructions are pre-filled with my last values.
-3. **Given** all header fields empty, **when** I generate, **then** the
-   document starts with the student name line only.
+1. **Given** any generated exam, **then** no school header, student identification
+   line or school-specific template is added. The teacher can copy the questions
+   into the template provided by their school.
 
 ### US3 — No image is lost silently (P1)
 
@@ -45,7 +40,9 @@ disappear without warning, and the question order is fixed by database ID.
    and can cancel or continue; nothing is omitted without that notice.
 3. **Given** an image narrower than the page, **when** exported, **then** it
    keeps its proportions and stored size; wider images are reduced to the text
-   width.
+   width. If only a height is stored, derive the width from the original
+   proportions. If both dimensions are stored and conflict with those
+   proportions, use the stored width and derive the height.
 
 ### US4 — I decide the order of questions (P2)
 
@@ -77,10 +74,11 @@ disappear without warning, and the question order is fixed by database ID.
 
 - **FR-001** Version labels appear in the document body and footer and on the
   answer key.
-- **FR-002** Header fields: school, teacher, subject (default: discipline
-  name), class, date, title, instructions; all optional. Student name and
-  number lines are always present.
-- **FR-003** School, teacher and instructions are remembered between sessions.
+- **FR-002** Do not add a school header, student identification lines, or
+  school-specific template. The user copies the generated questions into their
+  school's own template.
+- **FR-003** Multiple-version labels use numbers, and filenames use Portuguese
+  `_Versao_1.docx` spelling.
 - **FR-004** Pasted or inserted images are embedded in the question at input
   time whenever they can be read locally. The app makes no network request to
   fetch images (constitution II).
@@ -92,12 +90,15 @@ disappear without warning, and the question order is fixed by database ID.
   wherever questions are not shuffled.
 - **FR-008** The answer key can be placed at the end of the exam (default) or
   in a separate file.
-- **FR-009** Generated versions are pairwise distinct.
+- **FR-009** When shuffling is enabled, generated versions are pairwise distinct
+  or the user is told the requested number is unavailable.
 - **FR-010** Page numbers appear in the footer.
+- **FR-011** A question can be marked to keep its alternatives in their original
+  order, including when alternative shuffling is enabled. This setting persists.
 
 ## Success criteria
 
-- A teacher can hand out the generated file without editing it in Word first.
+- A teacher can copy the generated questions into their own school template.
 - A printed page from any version can be matched to its answer key.
 - KD-08 cannot be reproduced.
 
@@ -106,14 +107,12 @@ disappear without warning, and the question order is fixed by database ID.
 Custom Word templates and logos; PDF output; tables and lists fidelity (KD-17);
 real equation objects; saving the exam for later (spec 006).
 
-## Open questions
+## Owner decisions
 
-- [NEEDS CLARIFICATION: Version labels as letters (Versão A, B, …) or numbers?
-  With up to 999 versions, numbers are simpler; letters are what teachers
-  usually print.]
-- [NEEDS CLARIFICATION: Should output file names be Portuguese
-  (`_Versao_1.docx`) instead of `_Version_1.docx`?]
-- [NEEDS CLARIFICATION: Which header layout does the owner's school use? A
-  sample exam would settle FR-002.]
-- [NEEDS CLARIFICATION: Should questions with "todas/nenhuma das anteriores"
-  be markable as "do not shuffle alternatives"?]
+- Use numbered labels ("Versão 1", "Versão 2", …).
+- Use Portuguese version filenames (`_Versao_1.docx`).
+- Do not add a school header or student identification lines; the user copies
+  questions into the school's own template.
+- Allow each question to be marked to prevent alternative shuffling.
+- When both stored image dimensions conflict with the original aspect ratio,
+  use the stored width and preserve the original proportions.

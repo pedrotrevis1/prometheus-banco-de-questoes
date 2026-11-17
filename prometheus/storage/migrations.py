@@ -1,5 +1,5 @@
 """Forward-only schema migrations; callers manage transactions and backups."""
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def migrate_0_to_1(conn):
@@ -26,4 +26,9 @@ def migrate_1_to_2(conn):
     conn.execute('PRAGMA user_version = 2')
 
 
-MIGRATIONS = (migrate_0_to_1, migrate_1_to_2)
+def migrate_2_to_3(conn):
+    conn.execute('ALTER TABLE questoes ADD COLUMN keep_alternative_order INTEGER NOT NULL DEFAULT 0')
+    conn.execute('PRAGMA user_version = 3')
+
+
+MIGRATIONS = (migrate_0_to_1, migrate_1_to_2, migrate_2_to_3)

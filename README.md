@@ -13,8 +13,8 @@ Desenvolvido por **Pedro Trevisan** em Python, utilizando PySide6, SQLite e pyth
 - Formatação de texto e equações em enunciados, alternativas e respostas esperadas; imagens nos enunciados.
 - Busca com filtros por categoria, texto, dificuldade, tipo, ano/série, fonte e ano de origem.
 - Seleção de questões para composição de provas.
-- Exportação de provas para Word, com opção de incluir gabarito.
-- Geração de múltiplas versões, com embaralhamento de questões e alternativas.
+- Exportação de provas para Word, com questões em ordem escolhida, versões numeradas e gabarito opcional em arquivo separado.
+- Geração de múltiplas versões, com embaralhamento de questões e alternativas e opção de preservar a ordem das alternativas de uma questão.
 - Interface com temas claro e escuro.
 
 ## Novidades da versão 1.1

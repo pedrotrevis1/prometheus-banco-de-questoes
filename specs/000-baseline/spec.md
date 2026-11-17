@@ -78,6 +78,8 @@ Data structures are in [data-model.md](data-model.md).
 - **BL-035** A multiple-choice question requires all five alternatives A–E to
   be non-empty and exactly one marked "Correta".
 - **BL-036** An essay question may have an expected answer; it is optional.
+- **BL-036a** A question can be marked to keep its alternative order when
+  generating shuffled versions; the setting is preserved when editing or duplicating.
 - **BL-037** If the source matches an existing source ignoring case, the
   existing spelling is stored.
 - **BL-038** After saving, the form is cleared. Type, difficulty, segment and
@@ -114,24 +116,30 @@ Data structures are in [data-model.md](data-model.md).
 
 ## Generating an exam
 
-- **BL-050** The exam contains the selected questions ordered by ID, numbered
-  `1)`, `2)`…, with alternatives labelled `A)`–`E)`. Text is Arial 12 pt and
-  keeps bold, italic, underline, strikethrough, superscript and subscript.
-- **BL-051** Embedded images are placed on their own line at a fixed width of
-  4.5 inches.
-- **BL-052** With "Incluir gabarito" checked (default), a final page "Gabarito
-  Oficial" lists the correct letter or expected answer of each question.
-- **BL-053** With "Gerar múltiplas versões", 2 to 999 files are written, named
-  `<name>_Version_<n>.docx`. Existing files are overwritten only after
-  confirmation.
-- **BL-054** "Embaralhar questões" gives every version a distinct question
-  order; generation is refused if more versions are requested than orders exist.
-- **BL-055** "Embaralhar alternativas" reorders the alternatives of
-  multiple-choice questions and adjusts the answer key accordingly.
-- **BL-056** Files are written completely or not at all; a failure reports
-  which versions were saved.
-- **BL-057** The document has no title, header, student identification fields
-  or version label.
+- **BL-050** Selected questions can be reordered before generation; that order
+  is used when question shuffling is off. Questions are numbered `1)`, `2)`…,
+  with alternatives labelled `A)`–`E)`; supported text formatting is retained.
+- **BL-051** Readable pasted local PNG/JPEG images are embedded at paste time.
+  Images retain their proportions and stored width, or derive their width from a
+  stored height if no width is present; width takes precedence when both are
+  specified. Width is capped at the document text width. Before any output,
+  unsupported images are reported by question ID; continuation is explicit.
+- **BL-052** The answer key is included at the end by default, can be placed in
+  a separate matching file, or omitted.
+- **BL-053** Multiple versions are numbered and use filenames
+  `<name>_Versao_<n>.docx`; the version appears in the document and footer.
+  Single-version documents do not show a version label.
+- **BL-054** When shuffling is enabled, generated versions must have distinct
+  visible question content or generation reports that it could not produce them.
+  Version labels, answer keys and incidental text-run boundaries do not make
+  student content distinct; text, supported formatting, image data and sizes,
+  and question order do.
+- **BL-055** Alternative shuffling updates the answer key; questions marked to
+  keep their alternative order are not shuffled.
+- **BL-056** All outputs are prepared before publication; existing destinations
+  require confirmation and a failure reports any files already saved.
+- **BL-057** Documents have page numbers and no school header or student
+  identification fields; teachers use their school’s own template.
 
 ## Non-functional baseline
 
@@ -145,16 +153,11 @@ Data structures are in [data-model.md](data-model.md).
 | ID | Description | Addressed by |
 |---|---|---|
 | KD-03 | The delete action applies to the exam selection, including questions hidden by the current filter | Retained by owner decision |
-| KD-08 | Images that are not embedded PNG data (e.g. pasted with HTML from Word or a browser) are omitted from the exam without warning | 004 |
-| KD-09 | Exam has no header or version label (BL-057); image width is fixed (BL-051) | 004 |
-| KD-10 | Question order in the exam cannot be chosen (BL-050) | 004 |
-| KD-11 | With alternatives shuffled but questions not, two versions can come out identical | 004 |
 | KD-12 | Filtering by a parent category does not include questions tagged only with its children | 005 |
 | KD-13 | Text search runs over stored HTML, so it matches markup, misses text split by formatting, and ignores alternatives | 005 |
 | KD-14 | Exactly five alternatives are required | 005 |
 | KD-15 | Categories cannot be renamed or moved; names are globally unique | 005 |
 | KD-17 | Tables and lists in pasted content are flattened in the exam | Backlog |
-| KD-20 | An empty or multi-letter answer can pass validation when shuffling and then fail while remapping the answer key | Backlog |
 
 Planning note: spec 007 pagination is implemented with platform verification
 pending. Spec 008 source-year ranges are implemented with platform verification
