@@ -1,7 +1,7 @@
 # Feature specification: Question editing
 
-**Folder**: `003-question-editing` | **Status**: Draft | **Created**: 2026-11-14
-**Fixes**: KD-07 | **Plan**: to be written when this iteration starts
+**Folder**: `003-question-editing` | **Status**: In progress | **Created**: 2026-11-14
+**Fixes**: KD-07 | **Plan**: [plan.md](plan.md) | **Tasks**: [tasks.md](tasks.md)
 
 ## Why
 
@@ -26,6 +26,9 @@ category means deleting and retyping the whole question, images included.
    saved and the form returns to new-question mode.
 4. **Given** a question selected for the exam, **when** I edit it, **then** it
    stays selected.
+5. **Given** a saved edit, **when** the card is displayed, **then** it shows
+   when the question was last modified. Legacy questions without a known
+   modification time show that the time is unavailable.
 
 ### US2 — Not lose work by accident (P1)
 
@@ -65,6 +68,11 @@ category means deleting and retyping the whole question, images included.
 - **FR-007** A question can be duplicated into a new, unsaved question.
 - **FR-008** Loading and re-saving a question without changes leaves its
   rendered content and its exported exam output unchanged.
+- **FR-009** Record and show a last-modified timestamp on each question card.
+  Existing questions keep an unknown value until edited; new questions and
+  saved edits receive the current timestamp.
+- **FR-010** The existing formatting toolbar and equation insertion work on
+  the focused statement, alternative, or expected-answer editor.
 
 ## Success criteria
 
@@ -76,10 +84,7 @@ category means deleting and retyping the whole question, images included.
 Edit history or versions of a question; bulk editing (e.g. recategorizing many
 questions at once); new question types.
 
-## Open questions
+## Owner decisions
 
-- [NEEDS CLARIFICATION: Should the app record when a question was last
-  modified and show it on the card? It requires a new column now, or can wait
-  for spec 005.]
-- [NEEDS CLARIFICATION: Is US4 wanted in this iteration, or should it be
-  deferred?]
+- Record and show when a question was last modified.
+- Include formatting and equation insertion for alternatives and expected answers.

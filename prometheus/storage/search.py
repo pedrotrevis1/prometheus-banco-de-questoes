@@ -4,7 +4,7 @@ from prometheus.domain.search import SearchFilters, matches_legacy_filters
 
 COLUMNS = '''id, assunto, dificuldade, ano_sugerido, segmento, tipo, enunciado,
              alternativa_a, alternativa_b, alternativa_c, alternativa_d, alternativa_e, gabarito,
-             fonte_questao, ano_origem'''
+             fonte_questao, ano_origem, last_modified'''
 
 
 def search_questions(conn, filters, selected_ids=None):

@@ -7,10 +7,10 @@ Desenvolvido por **Pedro Trevisan** em Python, utilizando PySide6, SQLite e pyth
 ## Funcionalidades
 
 - Organização de bancos de questões por disciplina e categorias.
-- Cadastro de questões de múltipla escolha e dissertativas.
+- Cadastro, edição e duplicação de questões de múltipla escolha e dissertativas.
 - Classificação por dificuldade, segmento e ano/série escolar.
 - Registro da fonte da questão e do ano de origem.
-- Editor de enunciados com formatação de texto, imagens e equações.
+- Formatação de texto e equações em enunciados, alternativas e respostas esperadas; imagens nos enunciados.
 - Busca com filtros por categoria, texto, dificuldade, tipo, ano/série, fonte e ano de origem.
 - Seleção de questões para composição de provas.
 - Exportação de provas para Word, com opção de incluir gabarito.

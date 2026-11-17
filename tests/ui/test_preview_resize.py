@@ -7,7 +7,7 @@ from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QApplication
 from prometheus.app import ExamGeneratorApp
-from prometheus.storage.migrations import migrate_0_to_1
+from prometheus.storage.migrations import MIGRATIONS
 
 
 @pytest.fixture
@@ -19,7 +19,7 @@ def preview_window(tmp_path, monkeypatch):
     window = ExamGeneratorApp()
     conn = sqlite3.connect(':memory:')
     conn.create_function('CASEFOLD', 1, lambda v: str(v or '').casefold())
-    migrate_0_to_1(conn)
+    for migration in MIGRATIONS: migration(conn)
     conn.executemany('INSERT INTO questoes (id, assunto, tipo, enunciado) VALUES (?, ?, ?, ?)',
                      [(i, 'Bio', 'Dissertativa', '<p>' + 'conteúdo ' * 300 + '</p>') for i in range(1, 4)])
     conn.commit(); window.conn = conn

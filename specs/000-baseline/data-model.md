@@ -22,8 +22,8 @@ The theme is not stored.
 
 ## Question bank (SQLite, one file per discipline)
 
-`PRAGMA foreign_keys = ON` is set per connection. `PRAGMA user_version` is 1
-after the backup-protected migration from legacy version 0. Newer versions are
+`PRAGMA foreign_keys = ON` is set per connection. `PRAGMA user_version` is 2
+after backup-protected forward migration from earlier versions. Newer versions are
 rejected. Automatic backups are stored under the app data directory and capped
 at three per bank, with confirmation before deleting an identified old copy. The replacement is published before confirmed old copies are removed; a deletion failure can leave more than three copies.
 
@@ -42,6 +42,7 @@ at three per bank, with confirmation before deleting an identified old copy. The
 | `segmento` | TEXT NOT NULL DEFAULT '' | `Ensino Fundamental` or `Ensino Médio` |
 | `fonte_questao` | TEXT NOT NULL DEFAULT '' | Free text |
 | `ano_origem` | TEXT NOT NULL DEFAULT '' | Free text |
+| `last_modified` | TEXT, nullable | UTC timestamp; unknown for legacy questions |
 
 Legacy rows may hold JSON in `ano_sugerido` (`{"level": …, "years": […]}`);
 the app still reads that format.

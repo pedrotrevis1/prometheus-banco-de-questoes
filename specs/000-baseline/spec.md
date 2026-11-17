@@ -65,7 +65,7 @@ Data structures are in [data-model.md](data-model.md).
   (optional), source year (optional free text), categories, statement.
 - **BL-031** A question needs at least one category, a segment, at least one
   school year and a non-empty statement (text or image).
-- **BL-032** The statement editor supports bold, italic, underline,
+- **BL-032** The statement, alternative and expected-answer editors support bold, italic, underline,
   superscript, subscript and strikethrough through a toolbar. The toolbar acts
   only on the statement, not on alternatives or the essay answer.
 - **BL-033** "Inserir equação" converts typed text to formatted text: `^` and
@@ -82,7 +82,10 @@ Data structures are in [data-model.md](data-model.md).
   existing spelling is stored.
 - **BL-038** After saving, the form is cleared. Type, difficulty, segment and
   school years keep their values.
-- **BL-039** A saved question cannot be edited.
+- **BL-039** Saved questions can be edited or duplicated from their cards.
+  Edits retain the question ID and exam selection; duplicates get a new ID.
+  Unsaved changes require confirmation before they are discarded. Cards show
+  the last-modified time when known.
 
 ## Searching and selecting
 
@@ -140,7 +143,6 @@ Data structures are in [data-model.md](data-model.md).
 | ID | Description | Addressed by |
 |---|---|---|
 | KD-03 | The delete action applies to the exam selection, including questions hidden by the current filter | Retained by owner decision |
-| KD-07 | Questions cannot be edited (BL-039) | 003 |
 | KD-08 | Images that are not embedded PNG data (e.g. pasted with HTML from Word or a browser) are omitted from the exam without warning | 004 |
 | KD-09 | Exam has no header or version label (BL-057); image width is fixed (BL-051) | 004 |
 | KD-10 | Question order in the exam cannot be chosen (BL-050) | 004 |

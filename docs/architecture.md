@@ -8,7 +8,8 @@ The application lives in `prometheus/app.py` and starts with
 `python -m prometheus`. The Pix image is a bundled asset. Version shuffling,
 school-year parsing, and rich-text helpers live in `prometheus/domain/`.
 `prometheus/storage/` handles configuration, validated bank opening, schema
-migrations, backup and logging. Qt-free storage tests and offscreen UI checks
+migrations, backup, question persistence and logging. `prometheus/domain/questions.py`
+holds question validation and editing state. Qt-free storage tests and offscreen UI checks
 cover the safety workflow. Most UI and export code remains in the main window
 module. Search state and bounded queries live in `prometheus/domain/search.py`
 and `prometheus/storage/search.py`; the UI renders one page of at most 50

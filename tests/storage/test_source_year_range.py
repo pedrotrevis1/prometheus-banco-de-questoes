@@ -11,7 +11,7 @@ def conn():
     c.execute("""CREATE TABLE questoes (id INTEGER, assunto TEXT, dificuldade TEXT, ano_sugerido TEXT,
         segmento TEXT, tipo TEXT, enunciado TEXT, alternativa_a TEXT, alternativa_b TEXT,
         alternativa_c TEXT, alternativa_d TEXT, alternativa_e TEXT, gabarito TEXT,
-        fonte_questao TEXT, ano_origem TEXT)""")
+        fonte_questao TEXT, ano_origem TEXT, last_modified TEXT)""")
     values = ['2019', '2021', '2022', ' 2022 ', '2023', '2024', '2025',
               '2022/2023', 'c. 2022', 's/d', '', None, '0009', '10', '0', '10000']
     for i, year in enumerate(values, 1):
