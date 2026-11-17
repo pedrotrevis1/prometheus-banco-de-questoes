@@ -44,7 +44,7 @@ build_windows.ps1      # the PyInstaller command, with --add-data for assets
 - **QR asset.** The base64 block is decoded once to `assets/pix_qr.jpg`;
   `show_pix_qr` loads it via `resources.asset_path`.
 - **Version.** `APP_VERSION` is replaced by `prometheus.__version__`.
-- **Git history.** Use `git mv Prometheus1.1.py prometheus/app.py` in its own
+- **Git history.** Move `Prometheus1.1.py` to `prometheus/app.py` in its own
   commit before editing, so history follows the file.
 
 ## Test strategy

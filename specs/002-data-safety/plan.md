@@ -1,7 +1,7 @@
 # Implementation plan: Data safety
 
 **Spec**: [spec.md](spec.md) | **Status**: Draft | **Created**: 2026-11-14
-**Prerequisite**: 001 done. Resolve the spec's open questions before starting.
+**Prerequisite**: 001 foundation implemented; Windows verification remains pending by owner decision.
 
 ## Approach
 
@@ -18,7 +18,7 @@ configuration go through the new modules in this iteration.
 - `add_discipline(config, name, path)`, `rename_discipline`, `remove_discipline`,
   `relink_discipline`; names compared with `strip().casefold()`; raise
   `DuplicateDisciplineError`.
-- `save_config` writes to a temp file then `os.replace`, as the exam export does.
+- `save_config` writes to a temp file then `os.replace`, as the exam export does. Discipline changes use a separate configuration candidate, which is persisted before changing the active connection or UI state. If a newly created bank cannot be linked because saving fails, report its path and leave the file intact.
 
 ### `storage/database.py`
 
@@ -31,7 +31,7 @@ configuration go through the new modules in this iteration.
   (`questoes` and `assuntos` present), `FOREIGN` (anything else), plus
   `user_version`. A non-SQLite file surfaces as `sqlite3.DatabaseError` and is
   mapped to `NotABankError`.
-- `create=True` is passed only by first-run and by "Criar Novo Banco".
+- `create=True` is passed only after first-run confirmation and by "Criar Novo Banco".
 
 ### `storage/migrations.py`
 
@@ -50,9 +50,9 @@ configuration go through the new modules in this iteration.
 ### `storage/backup.py`
 
 - `manual(conn, destination)`: `sqlite3.Connection.backup()` into a new file,
-  written to a temp name then `os.replace`.
+  written to a temporary file then published without overwriting an existing destination.
 - `automatic(path)`: same into `<data_dir>/backups/<bank-stem>/<timestamp>.db`,
-  then prune to the newest 5.
+  retain at most 3, requesting explicit confirmation naming each old backup before deletion; cancel the upgrade if declined. Publish the replacement successfully before deleting confirmed old backups; a failed deletion leaves the replacement and any undeleted copies in place.
 - `is_cloud_path(path) -> bool`: matches path components `OneDrive*`,
   `iCloudDrive`, `Mobile Documents`, `Dropbox`, `Google Drive`, `My Drive`.
 
@@ -67,8 +67,7 @@ configuration go through the new modules in this iteration.
 | `switch_database_connection` | Calls `open_bank`; handles `BankNotFoundError` with the Locate / Remove / Cancel dialog; handles `NotABankError`, `BankTooNewError` with messages; on failure, falls back to the previous discipline |
 | Sidebar | Add "Fazer backup", "Renomear disciplina", "Remover da lista"; change the save dialog title; cloud warning after choosing a path |
 | `action_link_existing_database`, `action_create_new_database` | Use `config.add_discipline`; show duplicate-name error |
-| `QuestionCard` | Add an "Excluir" button with a callback; confirmation shows ID and the first 120 characters of the statement's plain text |
-| Search tab | Remove `btn_delete_selected_questions` and `delete_selected_questions` |
+| Search tab | Retain the existing bulk deletion workflow by owner decision |
 | `build_subject_tree`, `populate_parents`, connection close | Replace `except: pass` with logging plus a user message |
 | `show_help` | Add the backup and missing-bank paragraphs |
 
@@ -83,9 +82,9 @@ All storage tests use `tmp_path`; none need Qt.
   …) with rows; after upgrade rows are intact, columns exist, version is 1,
   one automatic backup exists. A migration forced to fail leaves the file
   byte-identical and the version unchanged.
-- Backup: copy opens and has the same row counts; pruning keeps 5.
+- Backup: copy opens and has the same row counts; retention keeps 3 with explicit confirmation; refusal cancels the upgrade.
 - Config: duplicate names (case, spaces), rename, remove, relink; atomic save.
-- UI flows (US1, US4, US5): manual checklist in `tasks.md`.
+- UI flows (US1, US5): manual checklist in `tasks.md`.
 
 ## Constitution check
 
@@ -103,5 +102,4 @@ All storage tests use `tmp_path`; none need Qt.
 - **Backup size and time** for banks with many images: the automatic backup
   runs only when an upgrade is needed, not on every open.
 - **Cloud detection is heuristic.** It is advisory only and never blocks.
-- **Removing bulk delete** may annoy users cleaning up a bank; see the spec's
-  open question.
+- **Bulk deletion** retains its existing risk of including hidden selected questions, by owner decision.

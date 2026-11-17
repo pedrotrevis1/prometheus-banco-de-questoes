@@ -109,8 +109,9 @@ uses SQLite FTS5) belongs in the plan.
 
 ## Out of scope
 
-New question types; saved exams (spec 006); result paging (backlog), unless
-the plan finds it necessary to meet the search success criterion.
+New question types; saved exams (spec 006); result paging and source-year range
+implementation (specs 007 and 008). If those land first, preserve their
+behavior while adapting their storage queries/tests to the normalized schema.
 
 ## Open questions
 
@@ -119,7 +120,9 @@ the plan finds it necessary to meet the search success criterion.
   Superior, a free "Outro".]
 - [NEEDS CLARIFICATION: May one question belong to more than one segment (e.g.
   9º Ano and 1ª Série)?]
-- [NEEDS CLARIFICATION: Should `source year` become a number, enabling range
-  filters (2019–2024)? Existing free-text values would need a mapping rule.]
+- [NEEDS CLARIFICATION: Should `source year` become a numeric stored value in
+  this migration, and how should existing free-text values map? Spec 008 now
+  proposes range filtering without changing storage; this numeric-storage
+  decision remains unresolved and is not required for those filters.]
 - [NEEDS CLARIFICATION: Is breaking compatibility with the v1.x executable
   acceptable (US1 scenario 3)?]
