@@ -67,7 +67,7 @@ Data structures are in [data-model.md](data-model.md).
   school year and a non-empty statement (text or image).
 - **BL-032** The statement, alternative and expected-answer editors support bold, italic, underline,
   superscript, subscript and strikethrough through a toolbar. The toolbar acts
-  only on the statement, not on alternatives or the essay answer.
+  on the last focused supported editor.
 - **BL-033** "Inserir equação" converts typed text to formatted text: `^` and
   `_` become superscript and subscript, arrows are replaced by symbols, and in
   "Química" mode digits after a letter become subscripts. It is not a
@@ -84,8 +84,10 @@ Data structures are in [data-model.md](data-model.md).
   school years keep their values.
 - **BL-039** Saved questions can be edited or duplicated from their cards.
   Edits retain the question ID and exam selection; duplicates get a new ID.
-  Unsaved changes require confirmation before they are discarded. Cards show
-  the last-modified time when known.
+  Unsaved changes require confirmation before they are discarded. A successful
+  bank change resets edit mode; a cancelled or failed change preserves it.
+  Failed question saves roll back and keep the form available for retry. Cards
+  show the last-modified time when known.
 
 ## Searching and selecting
 

@@ -85,8 +85,8 @@ spec/plan revision. Reassess predicates against the new model when 005 lands.
 
 ## Validation and performance evidence
 
-Use `sqlite3.connect(":memory:")` and synthetic rows; never open or populate
-the owner's bank. Test 0/1/49/50/51/123/2500 results, nonexistent page requests,
+Use `sqlite3.connect(":memory:")`, all current migrations, and synthetic rows; never open or populate
+the owner's bank. The benchmark fails on alerts or incorrect counts, page IDs or live-card counts. Test 0/1/49/50/51/123/2500 results, nonexistent page requests,
 sparse IDs, scattered category/year matches, legacy school-year JSON,
 casefolded sources, multiple filter combinations, large selected sets, page
 turns with edited-but-unapplied form text, hidden selections, empty selected

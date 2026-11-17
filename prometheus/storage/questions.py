@@ -32,8 +32,12 @@ def _apply_unchanged(values, unchanged):
 
 def insert_question(conn, draft, unchanged=None):
     values = _apply_unchanged(_values_with_source(conn, draft), unchanged)
-    cursor = conn.execute(f"INSERT INTO questoes ({', '.join(COLUMNS)}, last_modified) VALUES ({', '.join('?' for _ in COLUMNS)}, ?)", [*values, _timestamp()])
-    conn.commit()
+    try:
+        cursor = conn.execute(f"INSERT INTO questoes ({', '.join(COLUMNS)}, last_modified) VALUES ({', '.join('?' for _ in COLUMNS)}, ?)", [*values, _timestamp()])
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
     return cursor.lastrowid
 
 
@@ -49,8 +53,12 @@ def update_question(conn, question_id, draft, unchanged=None):
         raise LookupError(f'Question {question_id} no longer exists')
     values = _apply_unchanged(_values_with_source(conn, draft, existing_source=current[0] or ''), unchanged)
     assignments = ', '.join(f'{column} = ?' for column in COLUMNS)
-    cursor = conn.execute(f'UPDATE questoes SET {assignments}, last_modified = ? WHERE id = ?',
-                          [*values, _timestamp(), question_id])
-    if cursor.rowcount != 1:
-        raise LookupError(f'Question {question_id} no longer exists')
-    conn.commit()
+    try:
+        cursor = conn.execute(f'UPDATE questoes SET {assignments}, last_modified = ? WHERE id = ?',
+                              [*values, _timestamp(), question_id])
+        if cursor.rowcount != 1:
+            raise LookupError(f'Question {question_id} no longer exists')
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
