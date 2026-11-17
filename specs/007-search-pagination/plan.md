@@ -1,12 +1,13 @@
 # Implementation plan: Paged search results
 
-**Spec**: [spec.md](spec.md) | **Status**: Draft | **Created**: 2026-11-16
+**Spec**: [spec.md](spec.md) | **Status**: In progress | **Created**: 2026-11-16
 
 ## Prerequisite and scope check
 
-Implement after 001 and 002 are complete under the repository workflow. Their
-owner questions remain unresolved in this checkout. Paths below describe the
-post-foundation package: verify actual locations first. The current source
+The 001 and 002 implementation is merged; their Windows verification and
+release tasks remain pending. The owner authorized continuing with those
+checks deferred. The owner chose to retain the existing bulk deletion behavior.
+Paths below describe the post-foundation package. The current source
 anchors are `load_questions`, `QuestionCard`, `setup_tab_search`,
 `toggle_selected_question_view`, `show_filtered_questions`,
 `toggle_question_selection` and existing bank/register/delete refresh paths.
@@ -80,7 +81,7 @@ spec/plan revision. Reassess predicates against the new model when 005 lands.
   retains no foreign-bank IDs. Preserve existing bank filter behavior while
   revalidating category choices.
 - Exam generation must continue reading all selected IDs, not the page records.
-  Coordinate refresh with the single-question delete path delivered by 002.
+  Coordinate refresh with the existing bulk-delete path retained by 002.
 
 ## Validation and performance evidence
 

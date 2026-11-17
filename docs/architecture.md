@@ -10,7 +10,9 @@ school-year parsing, and rich-text helpers live in `prometheus/domain/`.
 `prometheus/storage/` handles configuration, validated bank opening, schema
 migrations, backup and logging. Qt-free storage tests and offscreen UI checks
 cover the safety workflow. Most UI and export code remains in the main window
-module. Windows verification remains pending.
+module. Search state and bounded queries live in `prometheus/domain/search.py`
+and `prometheus/storage/search.py`; the UI renders one page of at most 50
+question cards. Windows verification remains pending.
 
 ## Target state
 

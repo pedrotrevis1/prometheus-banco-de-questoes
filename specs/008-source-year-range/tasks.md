@@ -1,11 +1,10 @@
 # Tasks: Optional source-year range
 
-**Plan**: [plan.md](plan.md) | **Status**: Draft
+**Plan**: [plan.md](plan.md) | **Status**: In progress
 
-Do tasks in order, one at a time; mark only after validation. Implementation
-has not started in this planning change.
+Do tasks in order, one at a time; mark only after validation. The owner requested the next iteration while platform checks remain pending.
 
-- [ ] T001 Read the handoff and spec/plan; verify 007's completion and current module layout, preserving its applied-filter and selection contracts.
+- [x] T001 Read the handoff and spec/plan; verify 007 implementation and module layout. The owner checked macOS and requested the next iteration; detailed platform checks remain pending.
 - [ ] T002 Add failing domain tests for the spec's complete optional-bound/legacy-year table, inclusive endpoints, malformed input, inverted bounds and integer limits.
 - [ ] T003 Implement pure year parsing/range validation and extend the applied-filter model; pass T002 with no Qt or I/O in domain code.
 - [ ] T004 Add failing in-memory query tests for lower-only/upper-only/equal bounds, unknown legacy years, numeric rather than lexical ordering, combined filters, selected-only bypass and count/page agreement across more than 50 matches.

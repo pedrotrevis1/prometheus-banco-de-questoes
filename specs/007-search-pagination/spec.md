@@ -1,6 +1,6 @@
 # Feature specification: Paged search results
 
-**Folder**: `007-search-pagination` | **Status**: Draft | **Created**: 2026-11-16
+**Folder**: `007-search-pagination` | **Status**: In progress | **Created**: 2026-11-16
 **Fixes**: KD-16 | **Prerequisites**: 001, 002
 **Plan**: [plan.md](plan.md) | **Tasks**: [tasks.md](tasks.md)
 
@@ -85,8 +85,8 @@ page size of **50** on 2026-11-16.
   Portuguese error and never leave new counts paired with old page content.
 - **FR-006** Page navigation and filtering are read-only. They neither create
   database files nor change schema, stored years, rich text or images.
-- **FR-007** Data-safety spec 002's per-card deletion remains in force; exam
-  selection is never repurposed as a page/bulk deletion selection.
+- **FR-007** Retain spec 002's existing bulk deletion behavior: it applies to
+  all selected questions, including selections hidden by filters or pages.
 
 ## Success criteria
 
