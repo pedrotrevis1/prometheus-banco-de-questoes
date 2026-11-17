@@ -1,6 +1,6 @@
 # Search tab fixes: handoff for implementation agents
 
-**Prepared**: 2026-11-16 | **Scope of this change**: investigation and planning only
+**Prepared**: 2026-11-16 | **Status**: 007 implementation in progress; 008–009 remain planned
 
 Start here when continuing the owner's three reported problems in "Buscar e
 Selecionar Questões". Read `AGENTS.md`, [constitution.md](constitution.md),
@@ -16,9 +16,9 @@ and "até". "Desde: 2022" includes 2022 and later years. This changes source
 year (`ano_origem`), not school year (`ano_sugerido`).
 
 Pagination state transitions, invalid-year handling and resize constraints
-below are proposed acceptance rules in Draft specs. They are reviewable
-product decisions, not claims about released behavior. No implementation,
-benchmark or successful reproduction is claimed by this planning change.
+below describe the draft acceptance rules. Pagination is implemented and has
+synthetic offscreen measurements; platform verification remains pending.
+Source-year ranges and the resize symptom remain unimplemented.
 
 ## Documents and sequence
 
@@ -29,14 +29,10 @@ benchmark or successful reproduction is claimed by this planning change.
 | 2 | Replace exact source year with inclusive optional bounds | [008 spec](../specs/008-source-year-range/spec.md), [plan](../specs/008-source-year-range/plan.md), [tasks](../specs/008-source-year-range/tasks.md) |
 | 3 | Reproduce and fix preview resize instability | [009 spec](../specs/009-preview-resize/spec.md), [plan](../specs/009-preview-resize/plan.md), [tasks](../specs/009-preview-resize/tasks.md) |
 
-This is a proposed priority after 001/002; it does not mark those iterations
-complete or resolve their open questions. The checkout inspected for this
-plan still has one monolithic `Prometheus1.1.py`, no `prometheus/` package and
-no test suite. The roadmap has no explicit active iteration; 001 is its first
-unfinished item. Do not silently bypass it. In particular, 002 addresses the
-existing deletion of selected questions hidden by filters; pagination would
-make hidden selections more common. Do not reintroduce its removed bulk-delete
-control when changing the search footer.
+This sequence follows the merged 001/002 implementation; Windows verification
+and release work remain pending. The code is now in the `prometheus/` package
+and has an automated test suite. The owner chose to retain bulk deletion using the global selection, including
+questions hidden by filters or pages. The help text should make that clear.
 
 ## Evidence from the current source
 
@@ -100,5 +96,5 @@ share the search controller, query path and preview widgets.
 - [x] Inspect search, selection, year storage and resize code without opening a bank.
 - [x] Record the owner's page-size and affected-widget answers.
 - [x] Prepare three Draft specs with plans, ordered tasks and regression criteria.
-- [ ] Resolve prerequisite markers through the owner and implement the eligible tasks in a later change.
+- [x] Reconcile prerequisites and owner decisions; 007 implementation is in progress.
 - [ ] Run automated tests, GUI checks and performance measurements during implementation.

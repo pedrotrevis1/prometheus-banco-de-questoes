@@ -90,16 +90,17 @@ Data structures are in [data-model.md](data-model.md).
   category), text contained in the statement, source (partial, ignoring
   case), source year (exact), difficulty, school year, type.
   Filters are applied when "Filtrar Questões" is pressed.
-- **BL-041** All questions of the bank are listed when a bank is opened.
+- **BL-041** Results are ordered by ID and displayed in pages of at most 50;
+  the footer shows the range, total and page controls.
 - **BL-042** Each result is a card showing ID, segment and years, difficulty,
   type, categories, source and source year, and a preview of the statement
   with the alternatives (correct one highlighted) or the expected answer.
   Long previews can be expanded and resized.
 - **BL-043** Each card has a "Selecionar" checkbox. A counter shows how many
-  questions are selected for the exam. The selection is kept while filtering
+  questions are selected for the exam. The selection is kept while filtering or changing pages
   and is lost when the bank is switched or the app is closed.
 - **BL-044** "Navegar pelas questões selecionadas" shows only selected
-  questions.
+  questions in pages; leaving it restores the last applied search.
 - **BL-045** "Excluir questões selecionadas" permanently deletes every selected
   question after a confirmation that shows the bank name and the count.
 
@@ -145,13 +146,11 @@ Data structures are in [data-model.md](data-model.md).
 | KD-13 | Text search runs over stored HTML, so it matches markup, misses text split by formatting, and ignores alternatives | 005 |
 | KD-14 | Exactly five alternatives are required | 005 |
 | KD-15 | Categories cannot be renamed or moved; names are globally unique | 005 |
-| KD-16 | All questions are loaded and rendered at once; large banks will be slow; the owner reports this with approximately 2,500 questions | 007 (planned) |
 | KD-17 | Tables and lists in pasted content are flattened in the exam | Backlog |
 | KD-18 | Source-year filtering only accepts an exact stored value; no optional inclusive lower/upper year bounds | 008 (planned) |
 | KD-19 | Owner reports that dragging the resize corner of a question-card preview in tab 2 makes the interface appear to stretch downward; affected control confirmed, exact reproduction and root cause unverified | 009 (planned) |
 | KD-20 | An empty or multi-letter answer can pass validation when shuffling and then fail while remapping the answer key | Backlog |
 
-Planning note (2026-11-16): specs 007–009 describe proposed changes, not released
-behavior. BL-040 to BL-044 remain the current contract until implementation;
-the corresponding implementation tasks require updating them and recording
-which known defects have actually been fixed.
+Planning note: spec 007 pagination is implemented with platform verification
+pending. Specs 008–009 remain proposed; source-year and preview-resize behavior
+remain as described above.

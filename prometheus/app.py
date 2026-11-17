@@ -1,3 +1,5 @@
+from prometheus.domain.search import SearchFilters, SearchViewState
+from prometheus.storage.search import page_questions
 from prometheus.storage import database as storage_database
 from prometheus.storage import backup as storage_backup
 from prometheus.storage import config as storage_config
@@ -636,7 +638,7 @@ class QuestionCard(QFrame):
         self._preview_content_height = 0
         self.layout.addWidget(self.view_panel)
         self.view_panel.document().documentLayout().documentSizeChanged.connect(self._fit_initial_preview)
-        QTimer.singleShot(0, self._fit_initial_preview)
+        QTimer.singleShot(0, self, self._fit_initial_preview)
         self.resize_handle = VerticalResizeHandle(self.view_panel)
         self.layout.addWidget(self.resize_handle, alignment=Qt.AlignRight)
 
@@ -872,6 +874,13 @@ class ResizableTreeWidget(VerticalResizeMixin, QTreeWidget):
         super().resizeEvent(event)
         self._position_resize_handle()
 
+def dispose_question_card(widget):
+    """Disconnect preview callbacks before Qt deletes a result card."""
+    if isinstance(widget, QuestionCard):
+        widget.view_panel.document().documentLayout().documentSizeChanged.disconnect(widget._fit_initial_preview)
+    widget.deleteLater()
+
+
 class ExamGeneratorApp(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -884,7 +893,8 @@ class ExamGeneratorApp(QMainWindow):
         self.apply_theme()
         self._selection_style = QApplication.style() if IS_WINDOWS else AccessibleSelectionStyle(QStyleFactory.create("Fusion"))
         self.conn = None
-        self.selected_ids = set()
+        self.search_view = SearchViewState()
+        self.selected_ids = self.search_view.selected_ids
         first_run = not os.path.exists(os.path.join(self.get_data_dir(), "app_config.json"))
         self.config_data = self.load_global_config()
         self.current_discipline = self.config_data["current_discipline"]
@@ -983,6 +993,7 @@ class ExamGeneratorApp(QMainWindow):
         database_name = os.path.splitext(os.path.basename(self.db_path))[0] or self.current_discipline
         self.setWindowTitle(f"{APP_NAME} — {database_name}")
         self.selected_ids.clear()
+        self.search_view.set_selected_only(False)
         if hasattr(self, "lbl_selected_count"):
             self.lbl_selected_count.setText("0 questão(ões) selecionada(s) para a prova")
             self.btn_delete_selected_questions.setEnabled(False)
@@ -994,6 +1005,7 @@ class ExamGeneratorApp(QMainWindow):
             self.update_multi_version_controls()
         self.clear_register_form()
         self.reload_all_trees()
+        self.search_view.apply(self.current_search_filters())
         self.load_questions()
         return True
 
@@ -1053,7 +1065,7 @@ class ExamGeneratorApp(QMainWindow):
         <h3>1. Cadastrar Questão</h3>
         <p>Escolha o tipo e a dificuldade, informe o segmento e os anos/séries, selecione as categorias e preencha o enunciado. Nas questões de múltipla escolha, escreva as alternativas e marque a correta. Nas dissertativas, você pode registrar a resolução esperada. Clique em <b>Salvar Questão</b> para adicionar ao banco.</p>
         <h3>2. Buscar e Selecionar Questões</h3>
-        <p>Use os filtros de categoria, texto, fonte da questão, ano da fonte, dificuldade, ano/série escolar e tipo; depois clique em <b>Filtrar Questões</b>. A fonte pode ser buscada por parte do nome; o ano da fonte deve corresponder ao valor cadastrado. Deixe os campos de fonte e ano da fonte vazios para buscar sem essas restrições. Abra os cartões para revisar enunciados, alternativas e respostas. Marque <b>Selecionar</b> nas questões que entrarão na prova. Use <b>Navegar pelas questões selecionadas</b> para ver apenas essas questões.</p>
+        <p>Use os filtros de categoria, texto, fonte da questão, ano da fonte, dificuldade, ano/série escolar e tipo; depois clique em <b>Filtrar Questões</b>. A fonte pode ser buscada por parte do nome; o ano da fonte deve corresponder ao valor cadastrado. Deixe os campos de fonte e ano da fonte vazios para buscar sem essas restrições. Abra os cartões para revisar enunciados, alternativas e respostas. Marque <b>Selecionar</b> nas questões que entrarão na prova. Os resultados aparecem em páginas de até 50 questões; use <b>Anterior</b>, <b>Próxima</b> ou o número da página para navegar. A seleção permanece ao trocar de página ou filtro. Use <b>Navegar pelas questões selecionadas</b> para ver apenas essas questões. A exclusão de questões selecionadas inclui também as seleções que não estão visíveis na página atual.</p>
         <h3>3. Configurar e Gerar Prova</h3>
         <p>Depois de selecionar questões na aba anterior, escolha se deseja incluir o gabarito. Para criar versões diferentes, ative <b>Gerar múltiplas versões</b>, informe a quantidade e escolha se deseja embaralhar questões e alternativas. A opção de embaralhar alternativas fica disponível quando há questões de múltipla escolha selecionadas. Clique em <b>Gerar Arquivo da Prova</b> e escolha onde salvar os arquivos Word.</p>
         """
@@ -1408,7 +1420,13 @@ class ExamGeneratorApp(QMainWindow):
             while self.scroll_layout.count():
                 widget = self.scroll_layout.takeAt(0).widget()
                 if widget:
-                    widget.deleteLater()
+                    dispose_question_card(widget)
+            self.search_view.apply(SearchFilters())
+            self.lbl_result_range.setText("Nenhuma questão encontrada (0 questões)")
+            self.lbl_page_count.setText("Página 0 de 0")
+            self.btn_previous_page.setEnabled(False)
+            self.btn_next_page.setEnabled(False)
+            self.page_selector.setEnabled(False)
             self.setWindowTitle(APP_NAME)
         self.refresh_disciplines_dropdown()
         self.txt_db_path.setText(self.db_path)
@@ -1540,6 +1558,7 @@ class ExamGeneratorApp(QMainWindow):
                 self.conn.commit()
                 self.show_alert("Sucesso", f"Categoria '{subject_name}' deletada!", QMessageBox.Information)
                 self.reload_all_trees()
+                self.load_questions(selected_only=self.search_view.selected_only)
             except Exception as e:
                 self.conn.rollback()
                 self.show_alert("Erro", f"Falha ao deletar:\n{str(e)}", QMessageBox.Critical)
@@ -2109,6 +2128,7 @@ class ExamGeneratorApp(QMainWindow):
             
             self.show_alert("Sucesso", "Questão salva com sucesso!", QMessageBox.Information)
             self.clear_register_form()
+            self.load_questions(selected_only=self.search_view.selected_only)
             
         except Exception as e:
             self.show_alert("Erro", f"Falha ao salvar no banco:\n{str(e)}", QMessageBox.Critical)
@@ -2294,6 +2314,22 @@ class ExamGeneratorApp(QMainWindow):
         self.scroll_layout.setContentsMargins(5, 5, 5, 5)
         self.scroll_area.setWidget(self.scroll_content)
         results_panel.addWidget(self.scroll_area, stretch=1)
+        pager = QHBoxLayout()
+        self.lbl_result_range = QLabel("Nenhuma questão encontrada")
+        pager.addWidget(self.lbl_result_range, stretch=1)
+        self.btn_previous_page = QPushButton("Anterior")
+        self.btn_previous_page.clicked.connect(lambda: self.move_search_page(self.search_view.page - 1))
+        pager.addWidget(self.btn_previous_page)
+        self.page_selector = QSpinBox()
+        self.page_selector.setMinimum(1)
+        self.page_selector.valueChanged.connect(self.move_search_page)
+        pager.addWidget(self.page_selector)
+        self.lbl_page_count = QLabel("Página 0 de 0")
+        pager.addWidget(self.lbl_page_count)
+        self.btn_next_page = QPushButton("Próxima")
+        self.btn_next_page.clicked.connect(lambda: self.move_search_page(self.search_view.page + 1))
+        pager.addWidget(self.btn_next_page)
+        results_panel.addLayout(pager)
         delete_button_row = QHBoxLayout()
         delete_button_row.addStretch()
         delete_button_row.addWidget(self.btn_delete_selected_questions)
@@ -2322,60 +2358,23 @@ class ExamGeneratorApp(QMainWindow):
     def html_fragment(value):
         return html_fragment(value)
 
+    def move_search_page(self, page):
+        previous = self.search_view.page
+        self.search_view.page = page
+        if not self.load_questions(selected_only=self.search_view.selected_only):
+            self.search_view.page = previous
+            self.page_selector.blockSignals(True)
+            self.page_selector.setValue(max(1, previous))
+            self.page_selector.blockSignals(False)
+        else:
+            self.scroll_area.verticalScrollBar().setValue(0)
+
     def load_questions(self, selected_only=False):
-        if selected_only and not self.selected_ids:
-            while self.scroll_layout.count():
-                item = self.scroll_layout.takeAt(0)
-                widget = item.widget()
-                if widget:
-                    widget.deleteLater()
-            return
-
-        while self.scroll_layout.count():
-            item = self.scroll_layout.takeAt(0)
-            widget = item.widget()
-            if widget:
-                widget.deleteLater()
-
-        diff_filters = [] if selected_only else self.checked_filter_values(self.search_diff_group, "Todas as Dificuldades")
-        type_filters = [] if selected_only else self.checked_filter_values(self.search_type_group, "Todos os Tipos")
-        question_text_keyword = "" if selected_only else self.txt_search_question_text.text().strip()
-        source_keyword = "" if selected_only else self.txt_search_question_source.text().strip()
-        source_year = "" if selected_only else self.txt_search_source_year.text().strip()
-        year_filters = [] if selected_only else self.checked_filter_values(self.search_year_group, "Todos os Anos")
-        
-        selected_subjects = [] if selected_only else self.get_checked_subjects(self.tree_search_subjects)
-        query = """SELECT id, assunto, dificuldade, ano_sugerido, segmento, tipo, enunciado,
-                         alternativa_a, alternativa_b, alternativa_c, alternativa_d, alternativa_e, gabarito,
-                         fonte_questao, ano_origem
-                  FROM questoes WHERE 1=1"""
-        params = []
-
-        if selected_only:
-            placeholders = ",".join("?" for _ in self.selected_ids)
-            query += f" AND id IN ({placeholders})"
-            params.extend(sorted(self.selected_ids))
-        if diff_filters:
-            placeholders = ",".join("?" for _ in diff_filters)
-            query += f" AND dificuldade IN ({placeholders})"
-            params.extend(diff_filters)
-        if type_filters:
-            placeholders = ",".join("?" for _ in type_filters)
-            query += f" AND tipo IN ({placeholders})"
-            params.extend(type_filters)
-        if question_text_keyword:
-            query += " AND enunciado LIKE ?"
-            params.append(f"%{question_text_keyword}%")
-        if source_keyword:
-            query += " AND INSTR(CASEFOLD(fonte_questao), ?) > 0"
-            params.append(source_keyword.casefold())
-        if source_year:
-            query += " AND ano_origem = ?"
-            params.append(source_year)
+        cards = []
         try:
-            cursor = self.conn.cursor()
-            cursor.execute(query, params)
-            results = cursor.fetchall()
+            bounds, results = page_questions(
+                self.conn, self.search_view.applied, self.search_view.page,
+                self.selected_ids if selected_only else None)
 
             for row in results:
                 q_id, sub, dif, ano, segment, q_type, html_prompt = row[:7]
@@ -2383,15 +2382,6 @@ class ExamGeneratorApp(QMainWindow):
                 expected_answer = row[12]
                 question_source, question_source_year = row[13:15]
 
-                question_years = self.parse_question_year_values(ano, segment)
-                if year_filters and not set(year_filters).intersection(question_years):
-                    continue
-                
-                if selected_subjects:
-                    question_subjects = [s.strip() for s in (sub or "").split(";")]
-                    if not any(subj in question_subjects for subj in selected_subjects):
-                        continue
-                
                 is_checked = q_id in self.selected_ids
                 
                 year_label = self.format_question_year_info(ano, segment)
@@ -2427,32 +2417,74 @@ class ExamGeneratorApp(QMainWindow):
                     question_source=question_source, source_year=question_source_year
                 )
                 card.checkbox.setStyle(self._selection_style)
-                self.scroll_layout.addWidget(card)
+                cards.append(card)
 
+            while self.scroll_layout.count():
+                widget = self.scroll_layout.takeAt(0).widget()
+                if widget:
+                    dispose_question_card(widget)
+            for card in cards:
+                self.scroll_layout.addWidget(card)
+            self.search_view.page = bounds.page or 1
+            self.lbl_result_range.setText(
+                f"Mostrando {bounds.start}–{bounds.end} de {bounds.total} questões"
+                if bounds.total else "Nenhuma questão encontrada (0 questões)")
+            self.lbl_page_count.setText(f"Página {bounds.page} de {bounds.pages}")
+            self.page_selector.blockSignals(True)
+            self.page_selector.setRange(1, max(1, bounds.pages))
+            self.page_selector.setValue(bounds.page or 1)
+            self.page_selector.blockSignals(False)
+            self.page_selector.setEnabled(bounds.pages > 0)
+            self.btn_previous_page.setEnabled(bounds.page > 1)
+            self.btn_next_page.setEnabled(bounds.page < bounds.pages)
+            return True
         except Exception as e:
+            for card in cards:
+                dispose_question_card(card)
             self.show_alert("Erro", f"Erro ao buscar questões:\n{str(e)}", QMessageBox.Warning)
+            return False
+
+    def current_search_filters(self):
+        return SearchFilters(
+            difficulties=tuple(self.checked_filter_values(self.search_diff_group, "Todas as Dificuldades")),
+            question_types=tuple(self.checked_filter_values(self.search_type_group, "Todos os Tipos")),
+            text=self.txt_search_question_text.text().strip(),
+            source=self.txt_search_question_source.text().strip(),
+            source_year=self.txt_search_source_year.text().strip(),
+            school_years=tuple(self.checked_filter_values(self.search_year_group, "Todos os Anos")),
+            categories=tuple(self.get_checked_subjects(self.tree_search_subjects)),
+        )
 
     def toggle_selected_question_view(self, checked):
-        if checked and not self.selected_ids:
+        previous_mode, previous_page = self.search_view.selected_only, self.search_view.page
+        if not self.search_view.set_selected_only(checked):
             self.btn_browse_selected_questions.blockSignals(True)
             self.btn_browse_selected_questions.setChecked(False)
             self.btn_browse_selected_questions.blockSignals(False)
             return
-
-        if checked:
-            self.btn_browse_selected_questions.setText("Navegando pelas questões selecionadas")
-        else:
-            self.btn_browse_selected_questions.setText("Navegar pelas questões selecionadas")
+        if not self.load_questions(selected_only=checked):
+            self.search_view.selected_only, self.search_view.page = previous_mode, previous_page
+            self.btn_browse_selected_questions.blockSignals(True)
+            self.btn_browse_selected_questions.setChecked(previous_mode)
+            self.btn_browse_selected_questions.blockSignals(False)
+            return
+        self.btn_browse_selected_questions.setText(
+            "Navegando pelas questões selecionadas" if checked else "Navegar pelas questões selecionadas")
         self.btn_browse_selected_questions.setEnabled(bool(self.selected_ids) or checked)
-        self.load_questions(selected_only=checked)
+        self.scroll_area.verticalScrollBar().setValue(0)
 
     def show_filtered_questions(self):
-        if self.btn_browse_selected_questions.isChecked():
-            self.btn_browse_selected_questions.setChecked(False)
-        else:
-            self.btn_browse_selected_questions.setText("Navegar pelas questões selecionadas")
-            self.btn_browse_selected_questions.setEnabled(bool(self.selected_ids))
-            self.load_questions()
+        previous = (self.search_view.applied, self.search_view.selected_only, self.search_view.page)
+        self.search_view.apply(self.current_search_filters())
+        if not self.load_questions():
+            self.search_view.applied, self.search_view.selected_only, self.search_view.page = previous
+            return
+        self.btn_browse_selected_questions.blockSignals(True)
+        self.btn_browse_selected_questions.setChecked(False)
+        self.btn_browse_selected_questions.blockSignals(False)
+        self.btn_browse_selected_questions.setText("Navegar pelas questões selecionadas")
+        self.btn_browse_selected_questions.setEnabled(bool(self.selected_ids))
+        self.scroll_area.verticalScrollBar().setValue(0)
 
     def toggle_question_selection(self, q_id, state):
         if state == Qt.Checked.value or state == 2:
