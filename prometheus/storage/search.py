@@ -28,9 +28,14 @@ def search_questions(conn, filters, selected_ids=None):
     if filters.source:
         query += ' AND INSTR(CASEFOLD(fonte_questao), ?) > 0'
         params.append(filters.source.casefold())
-    if filters.source_year:
-        query += ' AND ano_origem = ?'
-        params.append(filters.source_year)
+    if filters.source_year_from is not None or filters.source_year_to is not None:
+        register_legacy_matchers(conn)
+    if filters.source_year_from is not None:
+        query += ' AND PROMETHEUS_SOURCE_YEAR(ano_origem) >= ?'
+        params.append(filters.source_year_from)
+    if filters.source_year_to is not None:
+        query += ' AND PROMETHEUS_SOURCE_YEAR(ano_origem) <= ?'
+        params.append(filters.source_year_to)
     rows = conn.execute(query, params).fetchall()
     return [row for row in rows if matches_legacy_filters(row[1], row[3], row[4], filters)]
 
@@ -39,6 +44,9 @@ def register_legacy_matchers(conn):
     """Register connection-local helpers that preserve legacy token semantics."""
     import json
     from prometheus.domain.school_years import parse_question_year_values
+    from prometheus.domain.source_years import parse_stored_year
+
+    conn.create_function('PROMETHEUS_SOURCE_YEAR', 1, parse_stored_year, deterministic=True)
 
     def category_matches(value, encoded):
         wanted = json.loads(encoded)
@@ -75,9 +83,12 @@ def page_questions(conn, filters, page, selected_ids=None):
         if filters.source:
             predicates.append('INSTR(CASEFOLD(fonte_questao), ?) > 0')
             params.append(filters.source.casefold())
-        if filters.source_year:
-            predicates.append('ano_origem = ?')
-            params.append(filters.source_year)
+        if filters.source_year_from is not None:
+            predicates.append('PROMETHEUS_SOURCE_YEAR(ano_origem) >= ?')
+            params.append(filters.source_year_from)
+        if filters.source_year_to is not None:
+            predicates.append('PROMETHEUS_SOURCE_YEAR(ano_origem) <= ?')
+            params.append(filters.source_year_to)
         if filters.categories:
             predicates.append('PROMETHEUS_CATEGORY_MATCH(assunto, ?)')
             params.append(json.dumps(filters.categories))

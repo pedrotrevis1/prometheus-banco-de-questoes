@@ -29,7 +29,7 @@ def conn():
     (SearchFilters(question_types=('Dissertativa',)), [2, 3]),
     (SearchFilters(text='texto'), [2]),
     (SearchFilters(source='EnEm'), [1, 3]),
-    (SearchFilters(source_year='2023'), [2, 3]),
+    (SearchFilters(source_year_from=2023, source_year_to=2023), [2, 3]),
     (SearchFilters(categories=('Bio',)), [1]),
     (SearchFilters(categories=('Física',), school_years=('2ª Série',)), [3]),
     (SearchFilters(school_years=('6º Ano',)), [2]),

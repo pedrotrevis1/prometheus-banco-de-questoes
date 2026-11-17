@@ -1,3 +1,5 @@
+from prometheus.domain.preview import legacy_drag_height, PreviewSizing
+from prometheus.domain.source_years import validate_year_range, YearRangeError
 from prometheus.domain.search import SearchFilters, SearchViewState
 from prometheus.storage.search import page_questions
 from prometheus.storage import database as storage_database
@@ -30,7 +32,7 @@ from PySide6.QtWidgets import (
     QRadioButton, QGridLayout, QProxyStyle, QStyle, QHeaderView, QStyleFactory, QSpinBox,
     QStyleOptionComboBox, QStyleOptionSpinBox
 )
-from PySide6.QtCore import Qt, QByteArray, QBuffer, QIODevice, QPoint, QPointF, QRectF, QSize, QTimer
+from PySide6.QtCore import Qt, QByteArray, QBuffer, QIODevice, QPoint, QPointF, QRectF, QSize, QTimer, QEvent
 from PySide6.QtGui import QFont, QPalette, QIcon, QIconEngine, QTextDocument, QTextImageFormat, QImage, QPixmap, QTextCharFormat, QTextCursor, QPainter, QPen, QPolygon, QPainterPath, QColor
 from docx import Document
 from docx.shared import Inches, Pt
@@ -577,9 +579,14 @@ class InsertEquationDialog(QDialog):
 
 class QuestionCard(QFrame):
     def __init__(self, q_id, subject, difficulty, ano, q_type, html_content, is_selected, toggle_callback,
-                 question_source="", source_year=""):
+                 question_source="", source_year="", result_viewport=None):
         super().__init__()
         self.q_id = q_id
+        self._result_viewport = result_viewport
+        self._preview_sizing = PreviewSizing()
+        self._fitting_preview = False
+        if result_viewport is not None:
+            result_viewport.installEventFilter(self)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(15, 15, 15, 15)
@@ -633,8 +640,7 @@ class QuestionCard(QFrame):
         self.view_panel.setMinimumHeight(0)
         self.view_panel.setMaximumHeight(150)
         self.view_panel._resize_minimum = 60
-        self.view_panel._preview_user_resized = False
-        self._preview_default_height = None
+        self.view_panel._preview_card = self
         self._preview_content_height = 0
         self.layout.addWidget(self.view_panel)
         self.view_panel.document().documentLayout().documentSizeChanged.connect(self._fit_initial_preview)
@@ -642,39 +648,61 @@ class QuestionCard(QFrame):
         self.resize_handle = VerticalResizeHandle(self.view_panel)
         self.layout.addWidget(self.resize_handle, alignment=Qt.AlignRight)
 
+    def _preview_geometry(self):
+        viewport = self._result_viewport
+        viewport_height = viewport.height() if viewport is not None else self.window().height()
+        if viewport_height <= 0:
+            viewport_height = 600
+        margins = self.layout.contentsMargins()
+        header = self.layout.itemAt(0).sizeHint().height()
+        chrome = margins.top() + margins.bottom() + header + self.resize_handle.height() + 2 * self.layout.spacing()
+        return viewport_height, chrome
+
+    def _set_preview_height(self, height):
+        if self.view_panel.height() != height:
+            self.view_panel.setFixedHeight(height)
+
     def _fit_initial_preview(self, *_):
-        viewport_width = self.view_panel.viewport().width()
-        if viewport_width <= 0:
+        if self._fitting_preview:
             return
+        self._fitting_preview = True
+        try:
+            viewport_width = self.view_panel.viewport().width()
+            if viewport_width <= 0:
+                return
+            document = self.view_panel.document()
+            if document.textWidth() != viewport_width:
+                document.setTextWidth(viewport_width)
+            content_height = document.documentLayout().documentSize().height()
+            if content_height <= 0:
+                return
+            self._preview_content_height = max(1, int(content_height + 12))
+            self.btn_toggle.setVisible(self._preview_content_height > 150)
+            self._set_preview_height(self._preview_sizing.fit(self._preview_content_height, *self._preview_geometry()))
+        finally:
+            self._fitting_preview = False
 
-        document = self.view_panel.document()
-        document.setTextWidth(viewport_width)
-        content_height = document.documentLayout().documentSize().height()
-        if content_height <= 0:
-            return
+    def eventFilter(self, watched, event):
+        if watched is self._result_viewport and event.type() == QEvent.Resize:
+            QTimer.singleShot(0, self, self._fit_initial_preview)
+        return super().eventFilter(watched, event)
 
-        self._preview_content_height = max(1, int(content_height + 12))
-        self.btn_toggle.setVisible(self._preview_content_height > 150)
+    def begin_preview_drag(self, pointer_y):
+        self._preview_sizing.begin_drag(self.view_panel.height(), pointer_y)
 
-        if self.btn_toggle.isChecked():
-            height = min(self._preview_content_height, 300)
-            if self.view_panel.height() != height:
-                self.view_panel.setFixedHeight(height)
-        elif not self.view_panel._preview_user_resized:
-            self._preview_default_height = min(self._preview_content_height, 150)
-            if self.view_panel.height() != self._preview_default_height:
-                self.view_panel.setFixedHeight(self._preview_default_height)
+    def move_preview_drag(self, pointer_y):
+        self._set_preview_height(self._preview_sizing.drag_to(pointer_y, *self._preview_geometry()))
+
+    def end_preview_drag(self):
+        self._preview_sizing.end_drag()
 
     def toggle_expansion(self):
-        if self.btn_toggle.isChecked():
-            height = min(max(150, self._preview_content_height), 300)
-            self.view_panel.setFixedHeight(height)
-            self.btn_toggle.setText("Ocultar" if IS_WINDOWS else "▲ Ocultar")
-            set_ui_icon(self.btn_toggle, "up")
-        else:
-            self.view_panel.setFixedHeight(self._preview_default_height or 150)
-            self.btn_toggle.setText("Ler enunciado" if IS_WINDOWS else "▼ Ler enunciado")
-            set_ui_icon(self.btn_toggle, "down")
+        expanded = self.btn_toggle.isChecked()
+        self._preview_sizing.toggle(expanded)
+        self._fit_initial_preview()
+        self.btn_toggle.setText(("Ocultar" if IS_WINDOWS else "▲ Ocultar") if expanded else
+                                ("Ler enunciado" if IS_WINDOWS else "▼ Ler enunciado"))
+        set_ui_icon(self.btn_toggle, "up" if expanded else "down")
 
 
 class VerticalResizeHandle(QWidget):
@@ -699,8 +727,8 @@ class VerticalResizeHandle(QWidget):
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self._start_y = event.globalPosition().toPoint().y()
-            if hasattr(self.owner, "_preview_user_resized"):
-                self.owner._preview_user_resized = True
+            if hasattr(self.owner, "_preview_card"):
+                self.owner._preview_card.begin_preview_drag(self._start_y)
             event.accept()
             return
         super().mousePressEvent(event)
@@ -708,16 +736,32 @@ class VerticalResizeHandle(QWidget):
     def mouseMoveEvent(self, event):
         if self._start_y is not None:
             current_y = event.globalPosition().toPoint().y()
-            delta = current_y - self._start_y
-            self.owner.setFixedHeight(max(self.owner._resize_minimum, self.owner.height() + delta))
-            self._start_y = current_y
+            if not event.buttons() & Qt.LeftButton:
+                self._end_drag()
+                return
+            if hasattr(self.owner, "_preview_card"):
+                self.owner._preview_card.move_preview_drag(current_y)
+            else:
+                delta = current_y - self._start_y
+                self.owner.setFixedHeight(legacy_drag_height(self.owner.height(), delta, self.owner._resize_minimum))
+                self._start_y = current_y
             event.accept()
             return
         super().mouseMoveEvent(event)
 
+    def _end_drag(self):
+        if self._start_y is not None and hasattr(self.owner, "_preview_card"):
+            self.owner._preview_card.end_preview_drag()
+        self._start_y = None
+
+    def event(self, event):
+        if event.type() in (QEvent.UngrabMouse, QEvent.Hide):
+            self._end_drag()
+        return super().event(event)
+
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
-            self._start_y = None
+            self._end_drag()
             event.accept()
             return
         super().mouseReleaseEvent(event)
@@ -1005,7 +1049,8 @@ class ExamGeneratorApp(QMainWindow):
             self.update_multi_version_controls()
         self.clear_register_form()
         self.reload_all_trees()
-        self.search_view.apply(self.current_search_filters())
+        applied = self.search_view.applied
+        self.search_view.apply(self.current_search_filters((applied.source_year_from, applied.source_year_to)))
         self.load_questions()
         return True
 
@@ -1065,7 +1110,7 @@ class ExamGeneratorApp(QMainWindow):
         <h3>1. Cadastrar Questão</h3>
         <p>Escolha o tipo e a dificuldade, informe o segmento e os anos/séries, selecione as categorias e preencha o enunciado. Nas questões de múltipla escolha, escreva as alternativas e marque a correta. Nas dissertativas, você pode registrar a resolução esperada. Clique em <b>Salvar Questão</b> para adicionar ao banco.</p>
         <h3>2. Buscar e Selecionar Questões</h3>
-        <p>Use os filtros de categoria, texto, fonte da questão, ano da fonte, dificuldade, ano/série escolar e tipo; depois clique em <b>Filtrar Questões</b>. A fonte pode ser buscada por parte do nome; o ano da fonte deve corresponder ao valor cadastrado. Deixe os campos de fonte e ano da fonte vazios para buscar sem essas restrições. Abra os cartões para revisar enunciados, alternativas e respostas. Marque <b>Selecionar</b> nas questões que entrarão na prova. Os resultados aparecem em páginas de até 50 questões; use <b>Anterior</b>, <b>Próxima</b> ou o número da página para navegar. A seleção permanece ao trocar de página ou filtro. Use <b>Navegar pelas questões selecionadas</b> para ver apenas essas questões. A exclusão de questões selecionadas inclui também as seleções que não estão visíveis na página atual.</p>
+        <p>Use os filtros de categoria, texto, fonte da questão, ano da fonte, dificuldade, ano/série escolar e tipo; depois clique em <b>Filtrar Questões</b>. A fonte pode ser buscada por parte do nome. Para o ano da fonte, use <b>Desde</b> para incluir esse ano e os seguintes, <b>até</b> para incluir esse ano e os anteriores, ou ambos para limitar o intervalo. Por exemplo: Desde 2022; até 2024; ou Desde 2022 até 2024. Use o mesmo ano nos dois campos para buscar um ano numérico exato. Deixe os campos vazios para buscar sem essas restrições. Abra os cartões para revisar enunciados, alternativas e respostas. Marque <b>Selecionar</b> nas questões que entrarão na prova. Os resultados aparecem em páginas de até 50 questões; use <b>Anterior</b>, <b>Próxima</b> ou o número da página para navegar. A seleção permanece ao trocar de página ou filtro. Use <b>Navegar pelas questões selecionadas</b> para ver apenas essas questões. A exclusão de questões selecionadas inclui também as seleções que não estão visíveis na página atual.</p>
         <h3>3. Configurar e Gerar Prova</h3>
         <p>Depois de selecionar questões na aba anterior, escolha se deseja incluir o gabarito. Para criar versões diferentes, ative <b>Gerar múltiplas versões</b>, informe a quantidade e escolha se deseja embaralhar questões e alternativas. A opção de embaralhar alternativas fica disponível quando há questões de múltipla escolha selecionadas. Clique em <b>Gerar Arquivo da Prova</b> e escolha onde salvar os arquivos Word.</p>
         """
@@ -2203,11 +2248,20 @@ class ExamGeneratorApp(QMainWindow):
         filter_panel.addWidget(self.txt_search_question_source)
 
         add_filter_header("Ano da Fonte:")
-        self.txt_search_source_year = QLineEdit()
-        self.txt_search_source_year.setPlaceholderText("Ex.: 2024")
-        self.txt_search_source_year.setToolTip("Ano de origem da questão, separado do ano/série escolar. Deixe vazio para buscar em todos os anos de origem.")
-        self.txt_search_source_year.returnPressed.connect(self.show_filtered_questions)
-        filter_panel.addWidget(self.txt_search_source_year)
+        source_year_row = QHBoxLayout()
+        self.txt_search_source_year_from = QLineEdit()
+        self.txt_search_source_year_to = QLineEdit()
+        for label_text, field in (("Desde", self.txt_search_source_year_from),
+                                  ("até", self.txt_search_source_year_to)):
+            label = QLabel(label_text)
+            label.setBuddy(field)
+            field.setAccessibleName(f"Ano da fonte {label_text}")
+            field.setPlaceholderText("Ex.: 2022")
+            field.setToolTip("Ano da fonte; deixe vazio para não limitar este lado do intervalo.")
+            field.returnPressed.connect(self.show_filtered_questions)
+            source_year_row.addWidget(label)
+            source_year_row.addWidget(field)
+        filter_panel.addLayout(source_year_row)
 
         add_filter_header("Dificuldade:")
         self.search_diff_group = QButtonGroup(self)
@@ -2414,7 +2468,8 @@ class ExamGeneratorApp(QMainWindow):
                 card_html = "<html><body>" + "".join(content_parts) + "</body></html>"
                 card = QuestionCard(
                     q_id, sub, dif, year_label, q_type, card_html, is_checked, self.toggle_question_selection,
-                    question_source=question_source, source_year=question_source_year
+                    question_source=question_source, source_year=question_source_year,
+                    result_viewport=self.scroll_area.viewport()
                 )
                 card.checkbox.setStyle(self._selection_style)
                 cards.append(card)
@@ -2444,13 +2499,15 @@ class ExamGeneratorApp(QMainWindow):
             self.show_alert("Erro", f"Erro ao buscar questões:\n{str(e)}", QMessageBox.Warning)
             return False
 
-    def current_search_filters(self):
+    def current_search_filters(self, bounds=None):
+        if bounds is None:
+            bounds = validate_year_range(self.txt_search_source_year_from.text(), self.txt_search_source_year_to.text())
         return SearchFilters(
             difficulties=tuple(self.checked_filter_values(self.search_diff_group, "Todas as Dificuldades")),
             question_types=tuple(self.checked_filter_values(self.search_type_group, "Todos os Tipos")),
             text=self.txt_search_question_text.text().strip(),
             source=self.txt_search_question_source.text().strip(),
-            source_year=self.txt_search_source_year.text().strip(),
+            source_year_from=bounds[0], source_year_to=bounds[1],
             school_years=tuple(self.checked_filter_values(self.search_year_group, "Todos os Anos")),
             categories=tuple(self.get_checked_subjects(self.tree_search_subjects)),
         )
@@ -2474,8 +2531,17 @@ class ExamGeneratorApp(QMainWindow):
         self.scroll_area.verticalScrollBar().setValue(0)
 
     def show_filtered_questions(self):
+        try:
+            filters = self.current_search_filters()
+        except YearRangeError as e:
+            message = ("O ano em 'Desde' deve ser menor ou igual ao ano em 'até'."
+                       if e.code == 'inverted' else
+                       "Informe um ano inteiro entre 1 e 9999 ou deixe o campo vazio.")
+            self.show_alert("Ano da fonte inválido", message, QMessageBox.Warning)
+            (self.txt_search_source_year_from if e.field == 'from' else self.txt_search_source_year_to).setFocus()
+            return
         previous = (self.search_view.applied, self.search_view.selected_only, self.search_view.page)
-        self.search_view.apply(self.current_search_filters())
+        self.search_view.apply(filters)
         if not self.load_questions():
             self.search_view.applied, self.search_view.selected_only, self.search_view.page = previous
             return

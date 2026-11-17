@@ -1,6 +1,6 @@
 # Search tab fixes: handoff for implementation agents
 
-**Prepared**: 2026-11-16 | **Status**: 007 implementation in progress; 008–009 remain planned
+**Prepared**: 2026-11-16 | **Status**: 007–009 implementations in progress; platform checks pending
 
 Start here when continuing the owner's three reported problems in "Buscar e
 Selecionar Questões". Read `AGENTS.md`, [constitution.md](constitution.md),
@@ -18,7 +18,7 @@ year (`ano_origem`), not school year (`ano_sugerido`).
 Pagination state transitions, invalid-year handling and resize constraints
 below describe the draft acceptance rules. Pagination is implemented and has
 synthetic offscreen measurements; platform verification remains pending.
-Source-year ranges and the resize symptom remain unimplemented.
+Source-year ranges and the reproduced preview-resize issue are implemented; platform checks remain pending.
 
 ## Documents and sequence
 

@@ -1,6 +1,6 @@
 # Implementation plan: Optional source-year range
 
-**Spec**: [spec.md](spec.md) | **Status**: Draft | **Created**: 2026-11-16
+**Spec**: [spec.md](spec.md) | **Status**: In progress | **Created**: 2026-11-16
 
 ## Approach
 
