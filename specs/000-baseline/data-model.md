@@ -22,7 +22,7 @@ The theme is not stored.
 
 ## Question bank (SQLite, one file per discipline)
 
-`PRAGMA foreign_keys = ON` is set per connection. `PRAGMA user_version` is 2
+`PRAGMA foreign_keys = ON` is set per connection. `PRAGMA user_version` is 3
 after backup-protected forward migration from earlier versions. Newer versions are
 rejected. Automatic backups are stored under the app data directory and capped
 at three per bank, with confirmation before deleting an identified old copy. The replacement is published before confirmed old copies are removed; a deletion failure can leave more than three copies.
@@ -43,6 +43,7 @@ at three per bank, with confirmation before deleting an identified old copy. The
 | `fonte_questao` | TEXT NOT NULL DEFAULT '' | Free text |
 | `ano_origem` | TEXT NOT NULL DEFAULT '' | Free text |
 | `last_modified` | TEXT, nullable | UTC timestamp; unknown for legacy questions |
+| `keep_alternative_order` | INTEGER NOT NULL DEFAULT 0 | 1 preserves alternative order during shuffling |
 
 Legacy rows may hold JSON in `ano_sugerido` (`{"level": …, "years": […]}`);
 the app still reads that format.
@@ -59,6 +60,6 @@ the app still reads that format.
 
 - Questions reference categories by name inside a string, so there is no
   referential integrity between `questoes` and `assuntos`.
-- Export reads `SELECT *` and addresses columns by position, so column order
-  is part of the implicit contract.
-- There are no timestamps and no record of generated exams.
+- Export selects named columns in an explicit order before building the exam;
+  unrelated legacy columns do not change the alternative-order setting.
+- Questions have an optional last-modified timestamp; generated exams are not recorded.

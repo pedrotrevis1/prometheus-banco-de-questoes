@@ -25,6 +25,7 @@ class QuestionDraft:
     essay_answer: RichContent
     source: str
     source_year: str
+    keep_alternative_order: bool = False
 
 
 class QuestionValidationError(ValueError):
@@ -62,7 +63,7 @@ def question_values(draft):
         answer = draft.essay_answer.html.strip() if draft.essay_answer.has_content else ''
     return (';'.join(draft.categories), draft.difficulty, draft.kind, draft.statement.html,
             ';'.join(draft.years), draft.segment, *alternatives, answer,
-            draft.source.strip(), draft.source_year.strip())
+            draft.source.strip(), draft.source_year.strip(), int(draft.keep_alternative_order))
 
 
 class QuestionSession:

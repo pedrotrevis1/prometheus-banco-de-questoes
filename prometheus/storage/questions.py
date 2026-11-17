@@ -5,18 +5,19 @@ from prometheus.domain.questions import question_values
 
 COLUMNS = ('assunto', 'dificuldade', 'tipo', 'enunciado', 'ano_sugerido', 'segmento',
            'alternativa_a', 'alternativa_b', 'alternativa_c', 'alternativa_d', 'alternativa_e',
-           'gabarito', 'fonte_questao', 'ano_origem')
+           'gabarito', 'fonte_questao', 'ano_origem', 'keep_alternative_order')
 
 
 def _values_with_source(conn, draft, existing_source=None):
     values = list(question_values(draft))
-    if existing_source is not None and values[-2] == existing_source.strip():
-        values[-2] = existing_source
-    elif values[-2]:
+    source_index = COLUMNS.index('fonte_questao')
+    if existing_source is not None and values[source_index] == existing_source.strip():
+        values[source_index] = existing_source
+    elif values[source_index]:
         row = conn.execute('SELECT fonte_questao FROM questoes WHERE CASEFOLD(TRIM(fonte_questao)) = ? ORDER BY id LIMIT 1',
-                           (values[-2].casefold(),)).fetchone()
+                           (values[source_index].casefold(),)).fetchone()
         if row:
-            values[-2] = row[0].strip()
+            values[source_index] = row[0].strip()
     return values
 
 

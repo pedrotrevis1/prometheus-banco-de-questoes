@@ -78,3 +78,22 @@ def test_failed_locked_commit_does_not_leak_into_later_save(tmp_path, operation)
         assert check.execute('SELECT id, enunciado FROM questoes ORDER BY id').fetchall() == [
             (first, '<p>original</p>'), (second, '<p>later success</p>')]
     writer.close()
+
+
+def test_keep_alternative_order_roundtrips_on_insert_update_and_duplicate():
+    from dataclasses import replace
+    from prometheus.storage.questions import get_question, update_question
+    conn = sqlite3.connect(':memory:')
+    conn.create_function('CASEFOLD', 1, lambda value: str(value or '').casefold())
+    for migration in MIGRATIONS: migration(conn)
+    content = RichContent('<p>text</p>', True)
+    draft = QuestionDraft(('Bio',), 'Fácil', 'Múltipla Escolha', content, ('1ª Série',),
+                          'Ensino Médio', (content,) * 5, 'C', RichContent('', False), '', '',
+                          keep_alternative_order=True)
+    question_id = insert_question(conn, draft)
+    assert get_question(conn, question_id)['keep_alternative_order'] == 1
+    update_question(conn, question_id, replace(draft, keep_alternative_order=False))
+    assert get_question(conn, question_id)['keep_alternative_order'] == 0
+    duplicate_id = insert_question(conn, draft)
+    assert get_question(conn, duplicate_id)['keep_alternative_order'] == 1
+    conn.close()
