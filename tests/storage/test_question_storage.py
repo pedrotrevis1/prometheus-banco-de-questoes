@@ -48,3 +48,33 @@ def test_edit_preserves_existing_source_spelling_when_unchanged():
     update_question(conn, 20, replace(draft, source='enem'))
     assert get_question(conn, 20)['fonte_questao'] == 'enem'
     conn.close()
+
+
+import pytest
+
+
+@pytest.mark.parametrize('operation', ['insert', 'update'])
+def test_failed_locked_commit_does_not_leak_into_later_save(tmp_path, operation):
+    from dataclasses import replace
+    from prometheus.storage.questions import update_question
+    path = tmp_path / 'locked.db'
+    writer = sqlite3.connect(path, timeout=0.01)
+    writer.create_function('CASEFOLD', 1, lambda v: str(v or '').casefold())
+    for migration in MIGRATIONS: migration(writer)
+    content = RichContent('<p>original</p>', True)
+    draft = QuestionDraft(('Bio',), 'Fácil', 'Dissertativa', content, ('1ª Série',), 'Ensino Médio', (), '', RichContent('', False), '', '')
+    first = insert_question(writer, draft)
+    second = insert_question(writer, draft)
+    reader = sqlite3.connect(path, timeout=0.01)
+    reader.execute('BEGIN'); reader.execute('SELECT * FROM questoes').fetchall()
+    failed = replace(draft, statement=RichContent('<p>failed change</p>', True))
+    with pytest.raises(sqlite3.OperationalError, match='locked'):
+        if operation == 'insert': insert_question(writer, failed)
+        else: update_question(writer, first, failed)
+    assert not writer.in_transaction
+    reader.rollback(); reader.close()
+    update_question(writer, second, replace(draft, statement=RichContent('<p>later success</p>', True)))
+    with sqlite3.connect(path) as check:
+        assert check.execute('SELECT id, enunciado FROM questoes ORDER BY id').fetchall() == [
+            (first, '<p>original</p>'), (second, '<p>later success</p>')]
+    writer.close()

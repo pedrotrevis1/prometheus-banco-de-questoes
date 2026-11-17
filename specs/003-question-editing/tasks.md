@@ -11,3 +11,10 @@ Complete tasks in order and mark each only after its verification passes.
 - [x] T007 Display last-modified time on cards and verify migrated legacy and newly saved questions.
 - [x] T008 Verify rich content and images survive an unchanged edit and export; run the full suite and update baseline, help, architecture and roadmap.
 - [ ] T009 The owner checked question editing on macOS and reported it worked. Other manual macOS flows, Windows and theme checks remain pending.
+
+## Ordered review follow-up
+
+- [x] R001 Reproduce and fix edit-session state across successful, failed and cancelled bank changes; cover switch, create, link and remove flows.
+- [x] R002 Reproduce and fix transaction leakage after failed question writes and commits; cover insert, update and retained UI form state.
+- [x] R003 Reproduce and correct the 007 pagination benchmark, then rerun rich and light datasets.
+- [x] R004 Verify and correct the baseline toolbar description.

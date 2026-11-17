@@ -37,4 +37,4 @@ without changing the stored stable representation.
 
 Data is protected by the existing pre-migration backup and transaction. No
 network or new dependency is introduced. Business rules and persistence remain
-outside widgets and are tested; user-facing text is Brazilian Portuguese.
+outside widgets and are tested; failed question writes or commits roll back before the error is shown. User-facing text is Brazilian Portuguese.

@@ -190,3 +190,178 @@ def test_removing_active_then_relinking_missing_next_bank(tmp_path, monkeypatch,
     assert window.conn.execute('SELECT 1').fetchone() == (1,)
     assert a.exists()
     window.close()
+
+
+@pytest.mark.parametrize('operation', ['switch', 'create', 'link', 'remove'])
+def test_edit_session_is_reset_after_successful_bank_change(tmp_path, monkeypatch, qt_app, operation):
+    import sqlite3
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QFileDialog
+    from prometheus.storage.database import open_bank
+
+    a, b, new = (tmp_path / name for name in ('a.db', 'b.db', 'new.db'))
+    for path, marker in ((a, 'A original'), (b, 'B original')):
+        conn = open_bank(path, create=True)
+        conn.execute("INSERT INTO assuntos (nome) VALUES ('Bio')")
+        conn.execute("INSERT INTO questoes (id, assunto, tipo, enunciado, ano_sugerido, segmento) VALUES (1, 'Bio', 'Dissertativa', ?, '1ª Série', 'Ensino Médio')", (marker,))
+        conn.commit(); conn.close()
+    disciplines = {'A': str(a), 'B': str(b)} if operation in ('switch', 'remove') else {'A': str(a)}
+    (tmp_path / 'app_config.json').write_text(json.dumps({'current_discipline': 'A', 'disciplines': disciplines}))
+    monkeypatch.setattr(ExamGeneratorApp, 'get_data_dir', lambda self: str(tmp_path))
+    monkeypatch.setattr(ExamGeneratorApp, 'show_confirm', lambda *args: True)
+    monkeypatch.setattr(ExamGeneratorApp, 'show_alert', lambda *args: None)
+    monkeypatch.setattr(ExamGeneratorApp, 'get_text_prompt', lambda *args: 'B')
+    monkeypatch.setattr(QFileDialog, 'getOpenFileName', lambda *args, **kwargs: (str(b), ''))
+    monkeypatch.setattr(QFileDialog, 'getSaveFileName', lambda *args, **kwargs: (str(new), ''))
+    w = ExamGeneratorApp(); w.open_question_for_edit(1)
+    assert w.question_session and w.question_session.question_id == 1
+    w.txt_prompt.setPlainText('unsaved edit in A')
+    if operation == 'switch': w.on_discipline_changed('B')
+    elif operation == 'create': w.action_create_new_database()
+    elif operation == 'link': w.action_link_existing_database()
+    else: w.action_remove_discipline()
+    assert w.question_session is None
+    assert w.lbl_register_title.text() == 'Cadastrar Nova Questão'
+    assert w.btn_cancel_edit.isHidden()
+    if operation == 'create':
+        w.conn.execute("INSERT INTO assuntos (nome) VALUES ('Bio')"); w.conn.commit(); w.reload_all_trees()
+    item = w.tree_register_subjects.topLevelItem(0); item.setCheckState(0, Qt.Checked)
+    next(iter(w.year_checkboxes.values())).setChecked(True)
+    w.cb_type.setCurrentText('Dissertativa'); w.txt_prompt.setPlainText('new question')
+    w.save_question()
+    with sqlite3.connect(a) as original:
+        assert original.execute('SELECT enunciado FROM questoes WHERE id=1').fetchone() == ('A original',)
+    if operation != 'create':
+        assert w.conn.execute('SELECT enunciado FROM questoes WHERE id=1').fetchone() == ('B original',)
+    assert w.conn.execute("SELECT COUNT(*) FROM questoes WHERE enunciado LIKE '%new question%'").fetchone()[0] == 1
+    w.close()
+
+
+@pytest.mark.parametrize('failure', ['cancel', 'open', 'save'])
+def test_unsuccessful_bank_change_preserves_edit_session(tmp_path, monkeypatch, qt_app, failure):
+    from prometheus.storage.database import open_bank
+    from prometheus.storage import config as storage_config
+    a, b = tmp_path / 'a.db', tmp_path / 'b.db'
+    for path in (a, b):
+        conn = open_bank(path, create=True)
+        conn.execute("INSERT INTO assuntos (nome) VALUES ('Bio')")
+        conn.execute("INSERT INTO questoes (id, assunto, tipo, enunciado, ano_sugerido, segmento) VALUES (1, 'Bio', 'Dissertativa', 'original', '1ª Série', 'Ensino Médio')")
+        conn.commit(); conn.close()
+    (tmp_path / 'app_config.json').write_text(json.dumps({'current_discipline': 'A', 'disciplines': {'A': str(a), 'B': str(b)}}))
+    monkeypatch.setattr(ExamGeneratorApp, 'get_data_dir', lambda self: str(tmp_path))
+    monkeypatch.setattr(ExamGeneratorApp, 'show_alert', lambda *args: None)
+    monkeypatch.setattr(ExamGeneratorApp, 'show_confirm', lambda *args: failure != 'cancel')
+    w = ExamGeneratorApp(); w.open_question_for_edit(1); w.txt_prompt.setPlainText('unsaved')
+    session, old_conn = w.question_session, w.conn
+    w.selected_ids.add(1)
+    if failure == 'open': monkeypatch.setattr('prometheus.storage.database.open_bank', lambda *a, **kw: (_ for _ in ()).throw(OSError('failure')))
+    if failure == 'save': monkeypatch.setattr(storage_config.os, 'replace', lambda *a: (_ for _ in ()).throw(OSError('failure')))
+    w.on_discipline_changed('B')
+    assert w.question_session is session and w.conn is old_conn
+    assert w.current_discipline == 'A' and w.txt_prompt.toPlainText() == 'unsaved'
+    assert w.selected_ids == {1} and '1' in w.lbl_register_title.text()
+    monkeypatch.setattr(w, 'show_confirm', lambda *args: True)
+    w.close()
+
+
+def test_removing_last_bank_clears_edit_mode(tmp_path, monkeypatch, qt_app):
+    from prometheus.storage.database import open_bank
+    bank = tmp_path / 'a.db'
+    conn = open_bank(bank, create=True)
+    conn.execute("INSERT INTO assuntos (nome) VALUES ('Bio')")
+    conn.execute("INSERT INTO questoes (id, assunto, tipo, enunciado, ano_sugerido, segmento) VALUES (1, 'Bio', 'Dissertativa', 'original', '1ª Série', 'Ensino Médio')")
+    conn.commit(); conn.close()
+    (tmp_path / 'app_config.json').write_text(json.dumps({'current_discipline': 'A', 'disciplines': {'A': str(bank)}}))
+    monkeypatch.setattr(ExamGeneratorApp, 'get_data_dir', lambda self: str(tmp_path))
+    monkeypatch.setattr(ExamGeneratorApp, 'show_confirm', lambda *args: True)
+    monkeypatch.setattr(ExamGeneratorApp, 'show_alert', lambda *args: None)
+    w = ExamGeneratorApp(); w.open_question_for_edit(1); w.action_remove_discipline()
+    assert w.conn is None and w.question_session is None
+    assert w.lbl_register_title.text() == 'Cadastrar Nova Questão' and w.btn_cancel_edit.isHidden()
+    assert bank.exists()
+    w.close()
+
+
+def test_failed_edit_save_keeps_unsaved_form(tmp_path, monkeypatch, qt_app):
+    import sqlite3
+    import prometheus.app as app_module
+    from prometheus.storage.database import open_bank
+    bank = tmp_path / 'bank.db'; conn = open_bank(bank, create=True)
+    conn.execute("INSERT INTO assuntos (nome) VALUES ('Bio')")
+    conn.execute("INSERT INTO questoes (id, assunto, tipo, enunciado, ano_sugerido, segmento) VALUES (1, 'Bio', 'Dissertativa', 'original', '1ª Série', 'Ensino Médio')")
+    conn.commit(); conn.close()
+    (tmp_path / 'app_config.json').write_text(json.dumps({'current_discipline': 'A', 'disciplines': {'A': str(bank)}}))
+    monkeypatch.setattr(ExamGeneratorApp, 'get_data_dir', lambda self: str(tmp_path))
+    monkeypatch.setattr(ExamGeneratorApp, 'show_confirm', lambda *args: True)
+    alerts = []
+    monkeypatch.setattr(ExamGeneratorApp, 'show_alert', lambda self, title, text, *args: alerts.append((title, text)))
+    w = ExamGeneratorApp(); w.open_question_for_edit(1); w.txt_prompt.setPlainText('retry this edit')
+    session = w.question_session
+    monkeypatch.setattr(app_module, 'update_question', lambda *args, **kwargs: (_ for _ in ()).throw(sqlite3.OperationalError('database is locked')))
+    w.save_question()
+    assert w.question_session is session and w.txt_prompt.toPlainText() == 'retry this edit'
+    assert alerts[-1][0] == 'Erro' and 'salvar' in alerts[-1][1]
+    w.close()
+
+
+def test_locked_ui_edit_cancel_then_other_save_does_not_commit_failed_edit(tmp_path, monkeypatch, qt_app):
+    import sqlite3
+    from prometheus.storage.database import open_bank
+    bank = tmp_path / 'locked-ui.db'; setup = open_bank(bank, create=True)
+    setup.execute("INSERT INTO assuntos (nome) VALUES ('Bio')")
+    setup.executemany("INSERT INTO questoes (id, assunto, tipo, enunciado, ano_sugerido, segmento) VALUES (?, 'Bio', 'Dissertativa', ?, '1ª Série', 'Ensino Médio')",
+                      [(1, 'first original'), (2, 'second original')])
+    setup.commit(); setup.close()
+    (tmp_path / 'app_config.json').write_text(json.dumps({'current_discipline': 'A', 'disciplines': {'A': str(bank)}}))
+    monkeypatch.setattr(ExamGeneratorApp, 'get_data_dir', lambda self: str(tmp_path))
+    monkeypatch.setattr(ExamGeneratorApp, 'show_confirm', lambda *args: True)
+    alerts = []
+    monkeypatch.setattr(ExamGeneratorApp, 'show_alert', lambda self, title, text, *args: alerts.append((title, text)))
+    w = ExamGeneratorApp(); w.conn.execute('PRAGMA busy_timeout = 10')
+    w.open_question_for_edit(1); w.txt_prompt.setPlainText('cancelled edit')
+    reader = sqlite3.connect(bank, timeout=0.01)
+    reader.execute('BEGIN'); reader.execute('SELECT * FROM questoes').fetchall()
+    w.save_question()
+    assert alerts[-1][0] == 'Erro' and w.txt_prompt.toPlainText() == 'cancelled edit'
+    assert w.question_session is not None and not w.conn.in_transaction
+    w.cancel_question_edit()
+    reader.rollback(); reader.close()
+    w.open_question_for_edit(2); w.txt_prompt.setPlainText('later successful edit'); w.save_question()
+    rows = w.conn.execute('SELECT id, enunciado FROM questoes ORDER BY id').fetchall()
+    assert rows[0] == (1, 'first original')
+    assert rows[1][0] == 2 and 'later successful edit' in rows[1][1]
+    w.close()
+
+
+@pytest.mark.parametrize('operation', ['create', 'link', 'remove'])
+@pytest.mark.parametrize('failure', ['cancel', 'save'])
+def test_cancelled_or_failed_bank_actions_preserve_edit_session(tmp_path, monkeypatch, qt_app, operation, failure):
+    from PySide6.QtWidgets import QFileDialog
+    from prometheus.storage.database import open_bank
+    from prometheus.storage import config as storage_config
+    a, b, new = (tmp_path / name for name in ('a.db', 'b.db', 'new.db'))
+    for path in (a, b):
+        conn = open_bank(path, create=True)
+        conn.execute("INSERT INTO assuntos (nome) VALUES ('Bio')")
+        conn.execute("INSERT INTO questoes (id, assunto, tipo, enunciado, ano_sugerido, segmento) VALUES (1, 'Bio', 'Dissertativa', 'original', '1ª Série', 'Ensino Médio')")
+        conn.commit(); conn.close()
+    disciplines = {'A': str(a), 'B': str(b)} if operation == 'remove' else {'A': str(a)}
+    (tmp_path / 'app_config.json').write_text(json.dumps({'current_discipline': 'A', 'disciplines': disciplines}))
+    monkeypatch.setattr(ExamGeneratorApp, 'get_data_dir', lambda self: str(tmp_path))
+    monkeypatch.setattr(ExamGeneratorApp, 'show_alert', lambda *args: None)
+    monkeypatch.setattr(ExamGeneratorApp, 'show_confirm', lambda *args: failure != 'cancel')
+    monkeypatch.setattr(ExamGeneratorApp, 'get_text_prompt', lambda *args: 'B')
+    monkeypatch.setattr(QFileDialog, 'getOpenFileName', lambda *args, **kwargs: (str(b), ''))
+    monkeypatch.setattr(QFileDialog, 'getSaveFileName', lambda *args, **kwargs: (str(new), ''))
+    w = ExamGeneratorApp(); w.open_question_for_edit(1); w.txt_prompt.setPlainText('unsaved')
+    session, old_conn = w.question_session, w.conn
+    w.selected_ids.add(1)
+    if failure == 'save':
+        monkeypatch.setattr(storage_config.os, 'replace', lambda *args: (_ for _ in ()).throw(OSError('failure')))
+    {'create': w.action_create_new_database, 'link': w.action_link_existing_database,
+     'remove': w.action_remove_discipline}[operation]()
+    assert w.question_session is session and w.conn is old_conn
+    assert w.current_discipline == 'A' and w.txt_prompt.toPlainText() == 'unsaved'
+    assert w.selected_ids == {1} and '1' in w.lbl_register_title.text()
+    monkeypatch.setattr(w, 'show_confirm', lambda *args: True)
+    w.close()

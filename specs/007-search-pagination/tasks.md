@@ -15,3 +15,7 @@ passes. Platform checks remain pending as noted below.
 - [x] T008 Wire all apply/mode/selection/bank/write refresh paths, card disposal and scroll reset. Verify hidden selections, last-page deletion/deselection, empty selected mode, no accidental selection signals, and unchanged all-selected-ID export.
 - [x] T009 Measure synthetic 2,500- and 5,000-question datasets with long HTML and images; record reference environment, cold/warm query and render times, card/payload counts, and repeated-page lifecycle results. Profile and revise the plan if the acceptance target is missed.
 - [ ] T010 Automated tests, an offscreen multi-page exam check, Help, baseline, architecture and roadmap are updated. The owner checked the macOS version and reported it seems OK. Detailed theme and interactive navigation checks and the Windows check remain pending; do not claim them passed.
+
+## Review follow-up
+
+- [x] R001 Reproduce the invalid schema benchmark, use current migrations, surface errors, validate every page and rerun rich/light measurements.

@@ -1067,7 +1067,7 @@ class ExamGeneratorApp(QMainWindow):
             self.btn_browse_selected_questions.setEnabled(False)
             self.btn_browse_selected_questions.blockSignals(False)
             self.update_multi_version_controls()
-        self.clear_register_form()
+        self.reset_question_form()
         self.reload_all_trees()
         applied = self.search_view.applied
         self.search_view.apply(self.current_search_filters((applied.source_year_from, applied.source_year_to)))
@@ -1490,7 +1490,7 @@ class ExamGeneratorApp(QMainWindow):
             self.lbl_selected_count.setText("0 questão(ões) selecionada(s) para a prova")
             self.btn_delete_selected_questions.setEnabled(False)
             self.btn_browse_selected_questions.setEnabled(False)
-            self.clear_register_form()
+            self.reset_question_form()
             self.reload_all_trees()
             while self.scroll_layout.count():
                 widget = self.scroll_layout.takeAt(0).widget()
@@ -2188,6 +2188,12 @@ class ExamGeneratorApp(QMainWindow):
             self.load_questions(selected_only=self.search_view.selected_only)
         except Exception as e:
             self.show_alert("Erro", f"Falha ao salvar no banco:\n{str(e)}", QMessageBox.Critical)
+
+    def reset_question_form(self):
+        self.question_session = None
+        self.lbl_register_title.setText("Cadastrar Nova Questão")
+        self.btn_cancel_edit.hide()
+        self.clear_register_form()
 
     def confirm_discard_question(self):
         current = self.question_draft_from_form()
