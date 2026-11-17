@@ -11,7 +11,7 @@ New planning documents do not mean that prerequisites have been implemented.
 | 000 | [baseline](../specs/000-baseline/spec.md) | Document the released v1.1 behavior | — | Done |
 | 001 | [project-foundation](../specs/001-project-foundation/spec.md) | Make the project buildable, testable and versioned, with no behavior change | — | In progress |
 | 002 | [data-safety](../specs/002-data-safety/spec.md) | Reduce ways to lose or misplace a question bank | 001 foundation (Windows verification pending) | In progress |
-| 003 | [question-editing](../specs/003-question-editing/spec.md) | Edit and duplicate existing questions | 002 | Draft |
+| 003 | [question-editing](../specs/003-question-editing/spec.md) | Edit and duplicate existing questions | 002 | In progress |
 | 004 | [exam-document-quality](../specs/004-exam-document-quality/spec.md) | Header, version labels, faithful images, chosen order | 001 | Draft |
 | 005 | [schema-normalization](../specs/005-schema-normalization/spec.md) | Relational categories and alternatives, real text search | 002, 003 | Draft |
 | 006 | [saved-exams-and-history](../specs/006-saved-exams-and-history/spec.md) | Save exams, see where each question was used | 005 | Draft |

@@ -1,3 +1,6 @@
+from prometheus.domain.questions import (RichContent, QuestionDraft, QuestionValidationError,
+    QuestionSession, format_last_modified, split_available_categories, stored_school_years, validate_question)
+from prometheus.storage.questions import get_question, insert_question, update_question
 from prometheus.domain.preview import legacy_drag_height, PreviewSizing
 from prometheus.domain.source_years import validate_year_range, YearRangeError
 from prometheus.domain.search import SearchFilters, SearchViewState
@@ -11,6 +14,7 @@ from prometheus.domain.school_years import parse_question_year_values, format_qu
 from prometheus.domain.richtext import html_fragment, format_equation_html
 
 import sys
+from dataclasses import replace
 from datetime import datetime
 import os
 import sqlite3
@@ -579,7 +583,8 @@ class InsertEquationDialog(QDialog):
 
 class QuestionCard(QFrame):
     def __init__(self, q_id, subject, difficulty, ano, q_type, html_content, is_selected, toggle_callback,
-                 question_source="", source_year="", result_viewport=None):
+                 question_source="", source_year="", result_viewport=None,
+                 edit_callback=None, duplicate_callback=None, last_modified=None):
         super().__init__()
         self.q_id = q_id
         self._result_viewport = result_viewport
@@ -596,10 +601,12 @@ class QuestionCard(QFrame):
         display_subject = (subject or "").replace(";", ", ").strip(", ")
         display_source = (question_source or "").strip() or "Não informada"
         display_source_year = (source_year or "").strip() or "Não informado"
+        modified_label = format_last_modified(last_modified) or "Não informada"
         header_label = QLabel(
             f"ID: {q_id} | Segmento/Ano: {ano} | {difficulty} | {q_type}\n"
             f"Assunto: {display_subject}\n"
-            f"Fonte da Questão: {display_source} | Ano: {display_source_year}"
+            f"Fonte da Questão: {display_source} | Ano: {display_source_year}\n"
+            f"Última alteração: {modified_label}"
         )
         header_label.setTextFormat(Qt.PlainText)
         header_label.setObjectName("CardLabel")
@@ -617,6 +624,12 @@ class QuestionCard(QFrame):
         
         header_layout.addWidget(header_label, stretch=1)
         header_layout.addWidget(self.btn_toggle)
+        self.btn_edit = QPushButton("Editar")
+        self.btn_edit.clicked.connect(lambda: edit_callback(q_id) if edit_callback else None)
+        header_layout.addWidget(self.btn_edit)
+        self.btn_duplicate = QPushButton("Duplicar")
+        self.btn_duplicate.clicked.connect(lambda: duplicate_callback(q_id) if duplicate_callback else None)
+        header_layout.addWidget(self.btn_duplicate)
         header_layout.addWidget(self.checkbox)
         self.layout.addLayout(header_layout)
 
@@ -939,11 +952,18 @@ class ExamGeneratorApp(QMainWindow):
         self.conn = None
         self.search_view = SearchViewState()
         self.selected_ids = self.search_view.selected_ids
+        self.question_session = None
         first_run = not os.path.exists(os.path.join(self.get_data_dir(), "app_config.json"))
         self.config_data = self.load_global_config()
         self.current_discipline = self.config_data["current_discipline"]
         self.db_path = self.config_data["disciplines"].get(self.current_discipline, "")
         self.setup_ui()
+        self._active_editor = self.txt_prompt
+        for editor in (self.txt_prompt, *self.alt_inputs.values(), self.txt_essay_answer):
+            editor.installEventFilter(self)
+            if editor is not self.txt_prompt:
+                editor.cursorPositionChanged.connect(self.update_toolbar_states)
+        self.form_snapshot = self.question_draft_from_form()
         create_default = False
         if first_run and self.db_path and not os.path.exists(self.db_path):
             create_default = self.show_confirm(
@@ -1108,7 +1128,8 @@ class ExamGeneratorApp(QMainWindow):
         <p>Use <b>Fazer backup</b> no menu para salvar uma cópia do banco em outro local. Antes de atualizar a estrutura de um banco, o Prometheus faz uma cópia automática. Se for necessário excluir um backup antigo, o aplicativo pedirá confirmação.</p>
         <p>Se um banco tiver sido movido ou estiver indisponível, use <b>Localizar arquivo</b> para apontar para ele, ou <b>Remover da lista</b> para remover apenas a disciplina. O arquivo não é apagado.</p>
         <h3>1. Cadastrar Questão</h3>
-        <p>Escolha o tipo e a dificuldade, informe o segmento e os anos/séries, selecione as categorias e preencha o enunciado. Nas questões de múltipla escolha, escreva as alternativas e marque a correta. Nas dissertativas, você pode registrar a resolução esperada. Clique em <b>Salvar Questão</b> para adicionar ao banco.</p>
+        <p>Escolha o tipo e a dificuldade, informe o segmento e os anos/séries, selecione as categorias e preencha o enunciado. Nas questões de múltipla escolha, escreva as alternativas e marque a correta. Nas dissertativas, você pode registrar a resolução esperada. Clique em <b>Salvar Questão</b> para adicionar ao banco. A barra de formatação e o botão de equação atuam no último campo de texto selecionado, inclusive alternativas e resposta esperada.</p>
+        <p>Na busca, use <b>Editar</b> para alterar uma questão mantendo seu ID, ou <b>Duplicar</b> para criar outra. A opção <b>Cancelar edição</b> retorna ao cadastro; alterações não salvas exigem confirmação antes de serem descartadas. Os cartões mostram a última alteração quando essa informação estiver disponível.</p>
         <h3>2. Buscar e Selecionar Questões</h3>
         <p>Use os filtros de categoria, texto, fonte da questão, ano da fonte, dificuldade, ano/série escolar e tipo; depois clique em <b>Filtrar Questões</b>. A fonte pode ser buscada por parte do nome. Para o ano da fonte, use <b>Desde</b> para incluir esse ano e os seguintes, <b>até</b> para incluir esse ano e os anteriores, ou ambos para limitar o intervalo. Por exemplo: Desde 2022; até 2024; ou Desde 2022 até 2024. Use o mesmo ano nos dois campos para buscar um ano numérico exato. Deixe os campos vazios para buscar sem essas restrições. Abra os cartões para revisar enunciados, alternativas e respostas. Marque <b>Selecionar</b> nas questões que entrarão na prova. Os resultados aparecem em páginas de até 50 questões; use <b>Anterior</b>, <b>Próxima</b> ou o número da página para navegar. A seleção permanece ao trocar de página ou filtro. Use <b>Navegar pelas questões selecionadas</b> para ver apenas essas questões. A exclusão de questões selecionadas inclui também as seleções que não estão visíveis na página atual.</p>
         <h3>3. Configurar e Gerar Prova</h3>
@@ -1348,6 +1369,9 @@ class ExamGeneratorApp(QMainWindow):
         if new_discipline not in self.config_data['disciplines']:
             self.refresh_disciplines_dropdown()
             return
+        if not self.confirm_discard_question():
+            self.refresh_disciplines_dropdown()
+            return
         old_name, old_path = self.current_discipline, self.db_path
         self.current_discipline = new_discipline
         self.db_path = self.config_data["disciplines"][new_discipline]
@@ -1360,6 +1384,8 @@ class ExamGeneratorApp(QMainWindow):
         self.txt_db_path.setText(self.db_path)
 
     def action_create_new_database(self):
+        if not self.confirm_discard_question():
+            return
         disc_name = self.get_text_prompt("Nova Disciplina", "Digite o nome da nova Disciplina (ex: Matemática, História):")
         if not disc_name: return
         disc_name = disc_name.strip()
@@ -1386,6 +1412,8 @@ class ExamGeneratorApp(QMainWindow):
         self.show_alert("Sucesso", f"Disciplina '{disc_name}' criada com sucesso!", QMessageBox.Information)
 
     def action_link_existing_database(self):
+        if not self.confirm_discard_question():
+            return
         file_path, _ = QFileDialog.getOpenFileName(self, "Abrir Banco de Dados (.db)", "", "SQLite Database (*.db)")
         if not file_path: return
         disc_name = self.get_text_prompt("Vincular Banco", "Digite um nome para identificar esta Disciplina no menu:")
@@ -1432,6 +1460,8 @@ class ExamGeneratorApp(QMainWindow):
         self.refresh_disciplines_dropdown()
 
     def action_remove_discipline(self):
+        if not self.confirm_discard_question():
+            return
         name = self.current_discipline
         if not name:
             self.show_alert("Aviso", "Não há disciplina selecionada.", QMessageBox.Warning)
@@ -1636,9 +1666,13 @@ class ExamGeneratorApp(QMainWindow):
             target_layout.addWidget(divider)
             return divider
 
-        lbl_title = QLabel("Cadastrar Nova Questão")
-        lbl_title.setObjectName("HeaderLabel")
-        left_col.addWidget(lbl_title)
+        self.lbl_register_title = QLabel("Cadastrar Nova Questão")
+        self.lbl_register_title.setObjectName("HeaderLabel")
+        left_col.addWidget(self.lbl_register_title)
+        self.btn_cancel_edit = QPushButton("Cancelar edição")
+        self.btn_cancel_edit.clicked.connect(self.cancel_question_edit)
+        self.btn_cancel_edit.hide()
+        left_col.addWidget(self.btn_cancel_edit)
         add_form_header(left_col, "Classificação da Questão")
 
         row1 = QHBoxLayout()
@@ -1904,29 +1938,35 @@ class ExamGeneratorApp(QMainWindow):
         self.tabs.addTab(tab, "Cadastrar Questão")
 
     # --- TEXT FORMATTING LOGIC ---
+    def eventFilter(self, watched, event):
+        if event.type() == QEvent.FocusIn and watched in (self.txt_prompt, *self.alt_inputs.values(), self.txt_essay_answer):
+            self._active_editor = watched
+            self.update_toolbar_states()
+        return super().eventFilter(watched, event)
+
     def set_text_bold(self):
-        cursor = self.txt_prompt.textCursor()
+        cursor = self._active_editor.textCursor()
         fmt = cursor.charFormat()
         fmt.setFontWeight(QFont.Bold if self.btn_bold.isChecked() else QFont.Normal)
         cursor.mergeCharFormat(fmt)
-        self.txt_prompt.mergeCurrentCharFormat(fmt)
+        self._active_editor.mergeCurrentCharFormat(fmt)
 
     def set_text_italic(self):
-        cursor = self.txt_prompt.textCursor()
+        cursor = self._active_editor.textCursor()
         fmt = cursor.charFormat()
         fmt.setFontItalic(self.btn_italic.isChecked())
         cursor.mergeCharFormat(fmt)
-        self.txt_prompt.mergeCurrentCharFormat(fmt)
+        self._active_editor.mergeCurrentCharFormat(fmt)
 
     def set_text_underline(self):
-        cursor = self.txt_prompt.textCursor()
+        cursor = self._active_editor.textCursor()
         fmt = cursor.charFormat()
         fmt.setFontUnderline(self.btn_underline.isChecked())
         cursor.mergeCharFormat(fmt)
-        self.txt_prompt.mergeCurrentCharFormat(fmt)
+        self._active_editor.mergeCurrentCharFormat(fmt)
 
     def set_text_superscript(self):
-        cursor = self.txt_prompt.textCursor()
+        cursor = self._active_editor.textCursor()
         fmt = cursor.charFormat()
         if self.btn_superscript.isChecked():
             self.btn_subscript.setChecked(False)
@@ -1934,10 +1974,10 @@ class ExamGeneratorApp(QMainWindow):
         else:
             fmt.setVerticalAlignment(QTextCharFormat.AlignNormal)
         cursor.mergeCharFormat(fmt)
-        self.txt_prompt.mergeCurrentCharFormat(fmt)
+        self._active_editor.mergeCurrentCharFormat(fmt)
 
     def set_text_subscript(self):
-        cursor = self.txt_prompt.textCursor()
+        cursor = self._active_editor.textCursor()
         fmt = cursor.charFormat()
         if self.btn_subscript.isChecked():
             self.btn_superscript.setChecked(False)
@@ -1945,17 +1985,17 @@ class ExamGeneratorApp(QMainWindow):
         else:
             fmt.setVerticalAlignment(QTextCharFormat.AlignNormal)
         cursor.mergeCharFormat(fmt)
-        self.txt_prompt.mergeCurrentCharFormat(fmt)
+        self._active_editor.mergeCurrentCharFormat(fmt)
 
     def set_text_strikethrough(self):
-        cursor = self.txt_prompt.textCursor()
+        cursor = self._active_editor.textCursor()
         fmt = cursor.charFormat()
         fmt.setFontStrikeOut(self.btn_strikethrough.isChecked())
         cursor.mergeCharFormat(fmt)
-        self.txt_prompt.mergeCurrentCharFormat(fmt)
+        self._active_editor.mergeCurrentCharFormat(fmt)
 
     def update_toolbar_states(self):
-        cursor = self.txt_prompt.textCursor()
+        cursor = self._active_editor.textCursor()
         fmt = cursor.charFormat()
         self.btn_bold.setChecked(fmt.fontWeight() == QFont.Bold)
         self.btn_italic.setChecked(fmt.fontItalic())
@@ -1972,7 +2012,7 @@ class ExamGeneratorApp(QMainWindow):
         if not expression:
             return
         html_equation = self.format_equation_html(expression, dlg.get_equation_type())
-        cursor = self.txt_prompt.textCursor()
+        cursor = self._active_editor.textCursor()
         cursor.insertHtml(html_equation)
 
     def format_equation_html(self, text, equation_type="Matemática"):
@@ -2097,86 +2137,132 @@ class ExamGeneratorApp(QMainWindow):
             if checkbox.isChecked() and checkbox.text() != all_label
         ]
 
+    def question_draft_from_form(self):
+        def content(editor):
+            return RichContent(editor.toHtml(), bool(editor.toPlainText().strip()))
+        checked = self.alt_radios.checkedButton()
+        return QuestionDraft(
+            categories=tuple(self.get_checked_subjects(self.tree_register_subjects)),
+            difficulty=self.checked_radio_text(self.diff_group), kind=self.cb_type.currentText(),
+            statement=content(self.txt_prompt),
+            years=tuple(label for label, checkbox in self.year_checkboxes.items() if checkbox.isChecked()),
+            segment=self.checked_radio_text(self.segment_group),
+            alternatives=tuple(content(self.alt_inputs[letter]) for letter in 'ABCDE'),
+            answer=chr(self.alt_radios.id(checked)) if checked else '',
+            essay_answer=content(self.txt_essay_answer),
+            source=self.txt_question_source.text(), source_year=self.txt_source_year.text(),
+        )
+
     def save_question(self):
         if not self.conn:
             self.show_alert("Erro", "O banco de dados não está conectado.", QMessageBox.Critical)
             return
-
-        q_type = self.cb_type.currentText()
-        diff = self.checked_radio_text(self.diff_group)
-        segment = self.checked_radio_text(self.segment_group)
-        selected_years = [label for label, checkbox in self.year_checkboxes.items() if checkbox.isChecked()]
-        question_source = self.txt_question_source.text().strip()
-        source_year = self.txt_source_year.text().strip()
-        html_prompt = self.txt_prompt.toHtml()
-        clean_text = self.txt_prompt.toPlainText().strip()
-        has_images = "<img" in html_prompt
-
-        selected_subjects = self.get_checked_subjects(self.tree_register_subjects)
-
-        if not selected_subjects:
-            self.show_alert("Aviso", "Selecione ao menos uma categoria na árvore lateral.", QMessageBox.Warning)
-            return
-        if not segment or not selected_years:
-            self.show_alert("Aviso", "Selecione o segmento e ao menos um ano/série.", QMessageBox.Warning)
-            return
-        if not clean_text and not has_images:
-            self.show_alert("Aviso", "O campo 'Enunciado' não pode estar vazio.", QMessageBox.Warning)
-            return
-
-        subject_string = ";".join(selected_subjects)
-        gabarito = ""
-        alt_data = {"A": "", "B": "", "C": "", "D": "", "E": ""}
-
-        if q_type == "Múltipla Escolha":
-            checked_button = self.alt_radios.checkedButton()
-            if not checked_button:
-                self.show_alert("Aviso", "Selecione uma alternativa como Correta.", QMessageBox.Warning)
-                return
-            gabarito = chr(self.alt_radios.id(checked_button))
-            
-            for letter, txt_input in self.alt_inputs.items():
-                val = txt_input.toHtml().strip()
-                if not txt_input.toPlainText().strip() and "<img" not in val:
-                    self.show_alert("Aviso", f"A alternativa {letter} está vazia.", QMessageBox.Warning)
-                    return
-                alt_data[letter] = val
-        else:
-            # AQUI ESTÁ A MUDANÇA: Verifica se há texto. Se não houver, salva vazio.
-            essay_html = self.txt_essay_answer.toHtml().strip()
-            if not self.txt_essay_answer.toPlainText().strip() and "<img" not in essay_html:
-                gabarito = ""
-            else:
-                gabarito = essay_html
-
+        draft = self.question_draft_from_form()
         try:
-            cursor = self.conn.cursor()
-            if question_source:
-                # Keep the spelling of the first registered matching source.
-                cursor.execute(
-                    "SELECT fonte_questao FROM questoes "
-                    "WHERE CASEFOLD(TRIM(fonte_questao)) = ? ORDER BY id LIMIT 1",
-                    (question_source.casefold(),)
-                )
-                existing_source = cursor.fetchone()
-                if existing_source:
-                    question_source = existing_source[0].strip()
-            cursor.execute('''
-                INSERT INTO questoes (assunto, dificuldade, tipo, enunciado, 
-                                      ano_sugerido, segmento, alternativa_a, alternativa_b, alternativa_c, 
-                                      alternativa_d, alternativa_e, gabarito, fonte_questao, ano_origem)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (subject_string, diff, q_type, html_prompt, ";".join(selected_years), segment,
-                  alt_data["A"], alt_data["B"], alt_data["C"], alt_data["D"], alt_data["E"], gabarito,
-                  question_source, source_year))
-            self.conn.commit()
-            
+            validate_question(draft)
+        except QuestionValidationError as error:
+            messages = {
+                'categories': "Selecione ao menos uma categoria na árvore lateral.",
+                'years': "Selecione o segmento e ao menos um ano/série.",
+                'statement': "O campo 'Enunciado' não pode estar vazio.",
+                'answer': "Selecione uma alternativa como Correta.",
+                'alternatives': "Preencha todas as alternativas.",
+                'alternative': f"A alternativa {error.letter} está vazia.",
+            }
+            self.show_alert("Aviso", messages[error.code], QMessageBox.Warning)
+            return
+        try:
+            session = self.question_session
+            unchanged = session.unchanged_values(draft) if session else None
+            if session:
+                draft = session.prepare(draft)
+            if session and session.mode == 'edit':
+                update_question(self.conn, session.question_id, draft, unchanged)
+            else:
+                insert_question(self.conn, draft, unchanged)
             self.show_alert("Sucesso", "Questão salva com sucesso!", QMessageBox.Information)
+            self.question_session = None
+            self.lbl_register_title.setText("Cadastrar Nova Questão")
+            self.btn_cancel_edit.hide()
             self.clear_register_form()
             self.load_questions(selected_only=self.search_view.selected_only)
-            
         except Exception as e:
             self.show_alert("Erro", f"Falha ao salvar no banco:\n{str(e)}", QMessageBox.Critical)
+
+    def confirm_discard_question(self):
+        current = self.question_draft_from_form()
+        session = self.question_session
+        dirty = session.is_dirty(current) if session else current != self.form_snapshot
+        return not dirty or self.show_confirm("Descartar alterações", "Há alterações não salvas na questão. Deseja descartá-las?")
+
+    def closeEvent(self, event):
+        if not self.confirm_discard_question():
+            event.ignore()
+            return
+        super().closeEvent(event)
+
+    def cancel_question_edit(self):
+        if not self.confirm_discard_question():
+            return
+        self.question_session = None
+        self.lbl_register_title.setText("Cadastrar Nova Questão")
+        self.btn_cancel_edit.hide()
+        self.clear_register_form()
+
+    def open_question_for_edit(self, question_id, duplicate=False):
+        if not self.conn or not self.confirm_discard_question():
+            return
+        try:
+            row = get_question(self.conn, question_id)
+            if row is None:
+                self.show_alert("Aviso", "A questão não foi encontrada.", QMessageBox.Warning)
+                return
+            self.clear_register_form()
+            self.cb_type.setCurrentText(row['tipo'] or '')
+            if row['dificuldade'] in self.diff_radios:
+                self.diff_radios[row['dificuldade']].setChecked(True)
+            segment, years = stored_school_years(row['ano_sugerido'], row['segmento'])
+            if segment in self.segment_radios:
+                self.segment_radios[segment].setChecked(True)
+            for label, checkbox in self.year_checkboxes.items():
+                checkbox.setChecked(label in years)
+            self.txt_question_source.setText(row['fonte_questao'] or '')
+            self.txt_source_year.setText(row['ano_origem'] or '')
+            self.txt_prompt.setHtml(row['enunciado'] or '')
+            for letter, editor in self.alt_inputs.items():
+                editor.setHtml(row[f'alternativa_{letter.lower()}'] or '')
+            if row['tipo'] == 'Múltipla Escolha':
+                button = self.alt_radios.button(ord((row['gabarito'] or ' ').strip().upper()[:1] or ' '))
+                if button:
+                    button.setChecked(True)
+                self.txt_essay_answer.clear()
+            else:
+                self.txt_essay_answer.setHtml(row['gabarito'] or '')
+            items = []
+            def visit(item):
+                items.append(item)
+                for index in range(item.childCount()):
+                    visit(item.child(index))
+            for index in range(self.tree_register_subjects.topLevelItemCount()):
+                visit(self.tree_register_subjects.topLevelItem(index))
+            present, missing = split_available_categories(row['assunto'], (item.text(0) for item in items))
+            for item in items:
+                item.setCheckState(0, Qt.Checked if item.text(0) in present else Qt.Unchecked)
+            initial = self.question_draft_from_form()
+            original = replace(initial,
+                statement=RichContent(row['enunciado'] or '', initial.statement.has_text),
+                alternatives=tuple(RichContent(row[f'alternativa_{letter.lower()}'] or '', original.has_text)
+                                   for letter, original in zip('ABCDE', initial.alternatives)),
+                essay_answer=RichContent((row['gabarito'] or '') if row['tipo'] != 'Múltipla Escolha' else '',
+                                         initial.essay_answer.has_text))
+            self.question_session = QuestionSession('duplicate' if duplicate else 'edit', question_id, initial, original, row, missing)
+            self.lbl_register_title.setText("Duplicar Questão" if duplicate else f"Editando questão {question_id}")
+            self.btn_cancel_edit.setVisible(True)
+            self.tabs.setCurrentIndex(0)
+            if missing:
+                self.show_alert("Categorias não encontradas", "Categorias não encontradas: " + ', '.join(missing), QMessageBox.Warning)
+        except Exception as e:
+            self.show_alert("Erro", f"Não foi possível carregar a questão: {e}", QMessageBox.Critical)
 
     def clear_register_form(self):
         self.txt_question_source.clear()
@@ -2198,6 +2284,7 @@ class ExamGeneratorApp(QMainWindow):
                 uncheck_all(item.child(i))
         for i in range(self.tree_register_subjects.topLevelItemCount()):
             uncheck_all(self.tree_register_subjects.topLevelItem(i))
+        self.form_snapshot = self.question_draft_from_form()
 
     # --- TAB 2: SEARCH & SELECT QUESTIONS ---
     def setup_tab_search(self):
@@ -2469,7 +2556,10 @@ class ExamGeneratorApp(QMainWindow):
                 card = QuestionCard(
                     q_id, sub, dif, year_label, q_type, card_html, is_checked, self.toggle_question_selection,
                     question_source=question_source, source_year=question_source_year,
-                    result_viewport=self.scroll_area.viewport()
+                    result_viewport=self.scroll_area.viewport(),
+                    edit_callback=lambda question_id: self.open_question_for_edit(question_id, False),
+                    duplicate_callback=lambda question_id: self.open_question_for_edit(question_id, True),
+                    last_modified=row[15]
                 )
                 card.checkbox.setStyle(self._selection_style)
                 cards.append(card)

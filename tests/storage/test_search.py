@@ -12,13 +12,13 @@ def conn():
     c.execute('''CREATE TABLE questoes (id INTEGER, assunto TEXT, dificuldade TEXT, ano_sugerido TEXT,
         segmento TEXT, tipo TEXT, enunciado TEXT, alternativa_a TEXT, alternativa_b TEXT,
         alternativa_c TEXT, alternativa_d TEXT, alternativa_e TEXT, gabarito TEXT,
-        fonte_questao TEXT, ano_origem TEXT)''')
+        fonte_questao TEXT, ano_origem TEXT, last_modified TEXT)''')
     rows = [
         (1, 'Bio; Física', 'Fácil', '1ª Série', 'Ensino Médio', 'Múltipla Escolha', '<p>célula</p>', '', '', '', '', '', 'A', 'ENEM', '2022'),
         (2, 'Biologia', 'Difícil', '{"level":"Ensino Fundamental","years":["6"]}', '', 'Dissertativa', '<b>texto</b>', '', '', '', '', '', '', 'Fuvest', '2023'),
         (3, 'Física', 'Fácil', '2ª Série;3ª Série', 'Ensino Médio', 'Dissertativa', 'outro', '', '', '', '', '', '', 'enem', '2023'),
     ]
-    c.executemany('INSERT INTO questoes VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', rows)
+    c.executemany('INSERT INTO questoes VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [(*row, None) for row in rows])
     yield c
     c.close()
 
@@ -59,7 +59,7 @@ def test_paged_results_count_and_content_match_all_predicates(conn):
     rows = [(i, 'Física' if i % 3 == 0 else 'Bio', 'Fácil',
              '2ª Série' if i % 2 == 0 else '1ª Série', 'Ensino Médio', 'Dissertativa',
              'grande ' * 100, '', '', '', '', '', '', 'ENEM', '2022') for i in range(10, 410)]
-    conn.executemany('INSERT INTO questoes VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', reversed(rows))
+    conn.executemany('INSERT INTO questoes VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [(*row, None) for row in reversed(rows)])
     filters = SearchFilters(categories=('Física',), school_years=('2ª Série',), source='enem')
     expected = [3] + [i for i in range(10, 410) if i % 6 == 0]
     pages = []
@@ -74,7 +74,7 @@ def test_paged_results_count_and_content_match_all_predicates(conn):
 def test_selected_page_respects_small_bind_limit_and_bypasses_filters(conn):
     from prometheus.storage.search import page_questions
     rows = [(i, '', '', '', '', '', 'x', '', '', '', '', '', '', '', '') for i in range(10, 210)]
-    conn.executemany('INSERT INTO questoes VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', rows)
+    conn.executemany('INSERT INTO questoes VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [(*row, None) for row in rows])
     conn.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, 16)
     selected = set(range(10, 210))
     bounds, result = page_questions(conn, SearchFilters(text='missing'), 3, selected)

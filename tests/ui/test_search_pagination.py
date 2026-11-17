@@ -4,7 +4,7 @@ import sqlite3
 import pytest
 from PySide6.QtWidgets import QApplication
 from prometheus.app import ExamGeneratorApp, QuestionCard
-from prometheus.storage.migrations import migrate_0_to_1
+from prometheus.storage.migrations import MIGRATIONS
 
 
 @pytest.fixture
@@ -16,7 +16,7 @@ def window(tmp_path, monkeypatch):
     w = ExamGeneratorApp()
     conn = sqlite3.connect(':memory:')
     conn.create_function('CASEFOLD', 1, lambda v: str(v or '').casefold())
-    migrate_0_to_1(conn)
+    for migration in MIGRATIONS: migration(conn)
     conn.executemany('INSERT INTO questoes (id, assunto, dificuldade, tipo, enunciado) VALUES (?, ?, ?, ?, ?)',
                      [(i, 'Bio', 'Fácil', 'Dissertativa', f'Questão {i}') for i in range(1, 124)])
     conn.commit(); w.conn = conn
@@ -184,3 +184,189 @@ def test_source_year_fields_have_accessible_labels_and_tooltips(window):
     for field in (window.txt_search_source_year_from, window.txt_search_source_year_to):
         assert 'fonte' in field.accessibleName().lower()
         assert 'vazio' in field.toolTip().lower()
+
+
+def test_registration_saves_using_extracted_core(window, monkeypatch):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QTreeWidgetItem
+    alerts = []
+    monkeypatch.setattr(window, 'show_alert', lambda title, text, *args: alerts.append((title, text)))
+    category = QTreeWidgetItem(window.tree_register_subjects, ['Bio'])
+    category.setCheckState(0, Qt.Checked)
+    next(iter(window.year_checkboxes.values())).setChecked(True)
+    window.cb_type.setCurrentText('Dissertativa')
+    window.txt_prompt.setPlainText('Questão de teste')
+    window.save_question()
+    row = window.conn.execute("SELECT enunciado FROM questoes WHERE enunciado LIKE '%Questão de teste%'").fetchone()
+    assert row is not None and alerts[-1][0] == 'Sucesso'
+
+
+def test_edit_and_duplicate_keep_original_id_and_rich_html(window, monkeypatch):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QTreeWidgetItem
+    alerts = []
+    monkeypatch.setattr(window, 'show_alert', lambda title, text, *args: alerts.append((title, text)))
+    category = QTreeWidgetItem(window.tree_register_subjects, ['Bio'])
+    category.setCheckState(0, Qt.Unchecked)
+    raw = '<p><b>Original</b><img src="data:image/png;base64,abc"></p>'
+    window.conn.execute("UPDATE questoes SET enunciado=?, ano_sugerido='1ª Série', segmento='Ensino Médio', gabarito='<p>Resposta</p>' WHERE id=1", (raw,))
+    window.conn.commit(); window.load_questions()
+    window.selected_ids.add(1)
+    window.scroll_layout.itemAt(0).widget().btn_edit.click()
+    assert window.tabs.currentIndex() == 0 and '1' in window.lbl_register_title.text()
+    window.txt_question_source.setText('ENEM')
+    window.save_question()
+    assert window.conn.execute('SELECT enunciado, fonte_questao FROM questoes WHERE id=1').fetchone() == (raw, 'ENEM')
+    assert 1 in window.selected_ids
+    window.load_questions()
+    window.scroll_layout.itemAt(0).widget().btn_duplicate.click()
+    window.save_question()
+    assert window.conn.execute('SELECT COUNT(*) FROM questoes WHERE enunciado=?', (raw,)).fetchone()[0] == 2
+    assert alerts[-1][0] == 'Sucesso'
+
+
+def test_edit_warns_about_missing_categories_and_cancel_keeps_bank(window, monkeypatch):
+    from PySide6.QtWidgets import QTreeWidgetItem
+    from PySide6.QtCore import Qt
+    messages = []
+    monkeypatch.setattr(window, 'show_alert', lambda title, text, *args: messages.append(text))
+    QTreeWidgetItem(window.tree_register_subjects, ['Bio']).setCheckState(0, Qt.Unchecked)
+    window.conn.execute("UPDATE questoes SET assunto='Bio;Removed', ano_sugerido='1ª Série', segmento='Ensino Médio' WHERE id=1")
+    window.conn.commit()
+    before = window.conn.execute('SELECT * FROM questoes WHERE id=1').fetchone()
+    window.open_question_for_edit(1)
+    assert any('Removed' in message for message in messages)
+    assert window.get_checked_subjects(window.tree_register_subjects) == ['Bio']
+    window.txt_prompt.setPlainText('not saved')
+    monkeypatch.setattr(window, 'show_confirm', lambda *args: True)
+    window.cancel_question_edit()
+    assert window.question_session is None
+    assert window.conn.execute('SELECT * FROM questoes WHERE id=1').fetchone() == before
+
+
+def test_dirty_form_blocks_opening_another_question(window, monkeypatch):
+    confirmations = []
+    monkeypatch.setattr(window, 'show_confirm', lambda title, text: confirmations.append(text) or False)
+    window.txt_prompt.setPlainText('Não perder')
+    window.open_question_for_edit(1)
+    assert confirmations and window.txt_prompt.toPlainText() == 'Não perder'
+    assert window.question_session is None
+
+
+def test_dirty_form_blocks_discipline_switch_and_close(window, monkeypatch):
+    confirmations = []
+    monkeypatch.setattr(window, 'show_confirm', lambda title, text: confirmations.append(text) or False)
+    window.config_data['disciplines']['Other'] = '/does/not/exist.db'
+    window.txt_prompt.setPlainText('Não perder')
+    before = window.conn
+    window.on_discipline_changed('Other')
+    assert window.conn is before and window.txt_prompt.toPlainText() == 'Não perder'
+    from PySide6.QtGui import QCloseEvent
+    event = QCloseEvent()
+    window.closeEvent(event)
+    assert not event.isAccepted() and len(confirmations) == 2
+    monkeypatch.setattr(window, 'show_confirm', lambda *a: True)
+
+
+@pytest.mark.parametrize('editor_name', ['statement', 'alternative', 'essay'])
+def test_toolbar_and_equation_target_focused_editor(window, monkeypatch, editor_name):
+    import prometheus.app as app_module
+    from PySide6.QtWidgets import QDialog
+    monkeypatch.setattr(window, 'show_confirm', lambda *a: True)
+    if editor_name == 'essay':
+        window.cb_type.setCurrentText('Dissertativa')
+    editor = {'statement': window.txt_prompt, 'alternative': window.alt_inputs['A'], 'essay': window.txt_essay_answer}[editor_name]
+    window.tabs.setCurrentIndex(0); window.show(); QApplication.processEvents()
+    editor.setPlainText('Alvo')
+    editor.setFocus(); editor.selectAll(); QApplication.processEvents()
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    if window.btn_bold.isChecked():
+        window.btn_bold.setChecked(False)
+    QTest.mouseClick(window.btn_bold, Qt.LeftButton)
+    assert 'font-weight:700' in editor.toHtml() or 'font-weight: 700' in editor.toHtml()
+    class FakeDialog:
+        def __init__(self, *args): pass
+        def exec(self): return QDialog.Accepted
+        def get_equation_text(self): return 'x^2'
+        def get_equation_type(self): return 'Matemática'
+    monkeypatch.setattr(app_module, 'InsertEquationDialog', FakeDialog)
+    editor.moveCursor(editor.textCursor().MoveOperation.End)
+    QTest.mouseClick(window.btn_add_equation, Qt.LeftButton)
+    assert 'x' in editor.toPlainText() and '2' in editor.toPlainText()
+    if editor_name != 'statement':
+        assert not window.txt_prompt.toPlainText()
+
+
+def test_question_card_displays_modified_time_or_unknown(window):
+    from PySide6.QtWidgets import QLabel
+    window.conn.execute("UPDATE questoes SET last_modified='2026-11-17T13:45:30+00:00' WHERE id=1")
+    window.conn.commit(); window.load_questions()
+    first = window.scroll_layout.itemAt(0).widget()
+    second = window.scroll_layout.itemAt(1).widget()
+    assert any('Última alteração:' in label.text() and 'Última alteração: Não informada' not in label.text() for label in first.findChildren(QLabel))
+    assert any('Última alteração: Não informada' in label.text() for label in second.findChildren(QLabel))
+
+
+def test_unchanged_edit_preserves_exported_text_and_embedded_image(window, tmp_path, monkeypatch):
+    import base64
+    import zipfile
+    from PySide6.QtCore import QByteArray, QBuffer, QIODevice, Qt
+    from PySide6.QtGui import QImage, QColor
+    from PySide6.QtWidgets import QTreeWidgetItem
+    monkeypatch.setattr(window, 'show_alert', lambda *args: None)
+    monkeypatch.setattr(window, 'show_confirm', lambda *args: True)
+    QTreeWidgetItem(window.tree_register_subjects, ['Bio']).setCheckState(0, Qt.Unchecked)
+    image = QImage(8, 8, QImage.Format_RGB32); image.fill(QColor('blue'))
+    raw = QByteArray(); buffer = QBuffer(raw); buffer.open(QIODevice.WriteOnly); assert image.save(buffer, 'PNG'); buffer.close()
+    encoded = base64.b64encode(bytes(raw)).decode('ascii')
+    html = '<p><b>Conteúdo</b> x<sup>2</sup></p><img src="data:image/png;base64,' + encoded + '">'
+    window.conn.execute("UPDATE questoes SET enunciado=?, ano_sugerido='1ª Série', segmento='Ensino Médio', gabarito='<p>Resposta</p>' WHERE id=1", (html,))
+    window.conn.commit()
+    before_path, after_path = tmp_path / 'before.docx', tmp_path / 'after.docx'
+    row = window.conn.execute('SELECT * FROM questoes WHERE id=1').fetchone()
+    window.build_exam_document([row]).save(before_path)
+    window.open_question_for_edit(1)
+    window.save_question()
+    updated = window.conn.execute('SELECT * FROM questoes WHERE id=1').fetchone()
+    assert updated[4] == html
+    window.build_exam_document([updated]).save(after_path)
+    with zipfile.ZipFile(before_path) as before, zipfile.ZipFile(after_path) as after:
+        assert before.read('word/document.xml') == after.read('word/document.xml')
+        images = [name for name in before.namelist() if name.startswith('word/media/')]
+        assert images and {name: before.read(name) for name in images} == {name: after.read(name) for name in images}
+
+
+def test_edit_preserves_untouched_legacy_year_and_source_text(window, monkeypatch):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QTreeWidgetItem
+    monkeypatch.setattr(window, 'show_alert', lambda *args: None)
+    QTreeWidgetItem(window.tree_register_subjects, ['Bio']).setCheckState(0, Qt.Unchecked)
+    legacy = '{"level":"Ensino Médio","years":["1"]}'
+    window.conn.execute("UPDATE questoes SET ano_sugerido=?, segmento='', fonte_questao=' enem ', ano_origem=' 2022 ' WHERE id=1", (legacy,))
+    window.conn.commit()
+    window.open_question_for_edit(1)
+    window.txt_prompt.setPlainText('Editada')
+    window.save_question()
+    assert window.conn.execute('SELECT ano_sugerido, segmento, fonte_questao, ano_origem FROM questoes WHERE id=1').fetchone() == (legacy, '', ' enem ', ' 2022 ')
+
+
+def test_edit_multiple_choice_preserves_answer_and_changes_type_only_on_save(window, monkeypatch):
+    from PySide6.QtWidgets import QTreeWidgetItem
+    from PySide6.QtCore import Qt
+    monkeypatch.setattr(window, 'show_alert', lambda *args: None)
+    monkeypatch.setattr(window, 'show_confirm', lambda *args: True)
+    QTreeWidgetItem(window.tree_register_subjects, ['Bio']).setCheckState(0, Qt.Unchecked)
+    alternatives = tuple(f'<p>Alternativa {letter}</p>' for letter in 'ABCDE')
+    window.conn.execute('''UPDATE questoes SET tipo='Múltipla Escolha', ano_sugerido='1ª Série',
+        segmento='Ensino Médio', alternativa_a=?, alternativa_b=?, alternativa_c=?, alternativa_d=?,
+        alternativa_e=?, gabarito='C' WHERE id=1''', alternatives)
+    window.conn.commit(); window.open_question_for_edit(1)
+    assert window.alt_radios.id(window.alt_radios.checkedButton()) == ord('C')
+    assert [window.alt_inputs[letter].toPlainText() for letter in 'ABCDE'] == [f'Alternativa {letter}' for letter in 'ABCDE']
+    window.cb_type.setCurrentText('Dissertativa')
+    assert window.conn.execute('SELECT alternativa_c FROM questoes WHERE id=1').fetchone()[0] == alternatives[2]
+    window.txt_essay_answer.setPlainText('Resposta alterada')
+    window.save_question()
+    row = window.conn.execute('SELECT tipo, alternativa_a, alternativa_c, gabarito FROM questoes WHERE id=1').fetchone()
+    assert row[:3] == ('Dissertativa', '', '') and 'Resposta alterada' in row[3]
