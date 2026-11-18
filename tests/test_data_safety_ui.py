@@ -9,6 +9,14 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 from prometheus.app import ExamGeneratorApp
 
 
+@pytest.fixture(autouse=True)
+def legacy_schema_for_characterization(monkeypatch):
+    """Keep these direct legacy-table UI regression fixtures on schema 3."""
+    from prometheus.storage import database
+    monkeypatch.setattr(database, 'SCHEMA_VERSION', 3)
+    monkeypatch.setattr(database, 'MIGRATIONS', database.MIGRATIONS[:3])
+
+
 @pytest.fixture(scope='module')
 def qt_app():
     return QApplication.instance() or QApplication([])

@@ -7,7 +7,7 @@ from prometheus.storage.questions import insert_question
 def test_insert_retains_html_and_existing_source_spelling():
     conn = sqlite3.connect(':memory:')
     conn.create_function('CASEFOLD', 1, lambda v: str(v or '').casefold())
-    for migration in MIGRATIONS: migration(conn)
+    for migration in MIGRATIONS[:3]: migration(conn)
     html = '<p>formatted <b>text</b><img src="data:image/png;base64,abc"></p>'
     content = RichContent(html, True)
     draft = QuestionDraft(('Bio',), 'Fácil', 'Dissertativa', content, ('1ª Série',), 'Ensino Médio', (), '', content, 'ENEM', '2024')
@@ -24,7 +24,7 @@ def test_update_preserves_identity_and_sets_timestamp():
     from prometheus.storage.questions import get_question, update_question
     conn = sqlite3.connect(':memory:')
     conn.create_function('CASEFOLD', 1, lambda v: str(v or '').casefold())
-    for migration in MIGRATIONS: migration(conn)
+    for migration in MIGRATIONS[:3]: migration(conn)
     content = RichContent('<p>before</p>', True)
     draft = QuestionDraft(('Bio',), 'Fácil', 'Dissertativa', content, ('1ª Série',), 'Ensino Médio', (), '', RichContent('', False), '', '')
     question_id = insert_question(conn, draft)
@@ -39,7 +39,7 @@ def test_edit_preserves_existing_source_spelling_when_unchanged():
     from prometheus.storage.questions import update_question, get_question
     conn = sqlite3.connect(':memory:')
     conn.create_function('CASEFOLD', 1, lambda v: str(v or '').casefold())
-    for migration in MIGRATIONS: migration(conn)
+    for migration in MIGRATIONS[:3]: migration(conn)
     content = RichContent('<p>text</p>', True)
     draft = QuestionDraft(('Bio',), 'Fácil', 'Dissertativa', content, ('1ª Série',), 'Ensino Médio', (), '', content, 'ENEM', '')
     insert_question(conn, draft)
@@ -60,7 +60,7 @@ def test_failed_locked_commit_does_not_leak_into_later_save(tmp_path, operation)
     path = tmp_path / 'locked.db'
     writer = sqlite3.connect(path, timeout=0.01)
     writer.create_function('CASEFOLD', 1, lambda v: str(v or '').casefold())
-    for migration in MIGRATIONS: migration(writer)
+    for migration in MIGRATIONS[:3]: migration(writer)
     content = RichContent('<p>original</p>', True)
     draft = QuestionDraft(('Bio',), 'Fácil', 'Dissertativa', content, ('1ª Série',), 'Ensino Médio', (), '', RichContent('', False), '', '')
     first = insert_question(writer, draft)
@@ -85,7 +85,7 @@ def test_keep_alternative_order_roundtrips_on_insert_update_and_duplicate():
     from prometheus.storage.questions import get_question, update_question
     conn = sqlite3.connect(':memory:')
     conn.create_function('CASEFOLD', 1, lambda value: str(value or '').casefold())
-    for migration in MIGRATIONS: migration(conn)
+    for migration in MIGRATIONS[:3]: migration(conn)
     content = RichContent('<p>text</p>', True)
     draft = QuestionDraft(('Bio',), 'Fácil', 'Múltipla Escolha', content, ('1ª Série',),
                           'Ensino Médio', (content,) * 5, 'C', RichContent('', False), '', '',

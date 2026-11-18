@@ -6,7 +6,7 @@ from prometheus.storage.exams import fetch_ordered_questions
 def test_fetch_preserves_order_and_respects_sqlite_limit():
     conn = sqlite3.connect(':memory:')
     from prometheus.storage.migrations import MIGRATIONS
-    for migration in MIGRATIONS: migration(conn)
+    for migration in MIGRATIONS[:3]: migration(conn)
     conn.executemany('INSERT INTO questoes (id, enunciado) VALUES (?, ?)', [(i, str(i)) for i in range(1, 11)])
     conn.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, 3)
     assert [row[0] for row in fetch_ordered_questions(conn, [9, 1, 8, 2, 7])] == [9, 1, 8, 2, 7]

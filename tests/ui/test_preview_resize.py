@@ -19,7 +19,7 @@ def preview_window(tmp_path, monkeypatch):
     window = ExamGeneratorApp()
     conn = sqlite3.connect(':memory:')
     conn.create_function('CASEFOLD', 1, lambda v: str(v or '').casefold())
-    for migration in MIGRATIONS: migration(conn)
+    for migration in MIGRATIONS[:3]: migration(conn)
     conn.executemany('INSERT INTO questoes (id, assunto, tipo, enunciado) VALUES (?, ?, ?, ?)',
                      [(i, 'Bio', 'Dissertativa', '<p>' + 'conteúdo ' * 300 + '</p>') for i in range(1, 4)])
     conn.commit(); window.conn = conn

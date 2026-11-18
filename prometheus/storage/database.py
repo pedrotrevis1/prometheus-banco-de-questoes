@@ -25,6 +25,10 @@ class BankTooNewError(BankError):
     pass
 
 
+class UpgradeCancelled(BankError):
+    pass
+
+
 class BankState(Enum):
     NEW = 'new'
     PROMETHEUS = 'prometheus'
@@ -63,7 +67,8 @@ def _initialize_new(path):
             os.unlink(temporary)
 
 
-def open_bank(path, *, create=False, backup_dir=None, confirm_delete=None):
+def open_bank(path, *, create=False, backup_dir=None, confirm_delete=None,
+              confirm_upgrade=None, report_upgrade=None):
     path = Path(path).resolve()
     if not path.is_file():
         if not create:
@@ -85,6 +90,15 @@ def open_bank(path, *, create=False, backup_dir=None, confirm_delete=None):
         if version < SCHEMA_VERSION:
             if backup_dir is None or confirm_delete is None:
                 raise BankError('Backup destination and confirmation callback are required for migration')
+            normalization_upgrade = version < 4 <= SCHEMA_VERSION
+            segment_upgrade = version < 5 <= SCHEMA_VERSION
+            if segment_upgrade and report_upgrade is None:
+                raise BankError('Upgrade report callback is required')
+            if normalization_upgrade:
+                if confirm_upgrade is None or report_upgrade is None:
+                    raise BankError('Upgrade confirmation and report callbacks are required')
+                if not confirm_upgrade(path):
+                    raise UpgradeCancelled(str(path))
             backup.automatic(conn, path, backup_dir, confirm_delete)
             conn.execute('BEGIN IMMEDIATE')
             try:
@@ -94,6 +108,10 @@ def open_bank(path, *, create=False, backup_dir=None, confirm_delete=None):
             except Exception:
                 conn.rollback()
                 raise
+            if normalization_upgrade or segment_upgrade:
+                report_upgrade(conn.execute(
+                    'SELECT question_id, field, value FROM normalization_report ORDER BY question_id, field, value'
+                ).fetchall())
         conn.create_function('CASEFOLD', 1, lambda value: str(value or '').casefold(), deterministic=True)
         conn.execute('PRAGMA foreign_keys = ON')
         return conn
@@ -105,10 +123,13 @@ def open_bank(path, *, create=False, backup_dir=None, confirm_delete=None):
 
 def seed_biology_categories(conn, discipline):
     """Preserve the legacy default categories for empty biology banks."""
-    if 'biologia' not in discipline.lower() or conn.execute('SELECT COUNT(*) FROM assuntos').fetchone()[0]:
+    normalized = conn.execute('PRAGMA user_version').fetchone()[0] >= 4
+    table = 'normalized_categories' if normalized else 'assuntos'
+    name_column = 'name' if normalized else 'nome'
+    if 'biologia' not in discipline.lower() or conn.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0]:
         return
     names = ('Citologia', 'Ecologia', 'Embriologia', 'Evolução', 'Fisiologia',
              'Genética', 'Histologia', 'Origem da Vida', 'Parasitologia',
              'Reino Animal', 'Protistas', 'Reino Vegetal', 'Fungos', 'Bactérias')
-    conn.executemany('INSERT OR IGNORE INTO assuntos (nome, parent_id) VALUES (?, NULL)', ((name,) for name in names))
+    conn.executemany(f'INSERT OR IGNORE INTO {table} ({name_column}, parent_id) VALUES (?, NULL)', ((name,) for name in names))
     conn.commit()

@@ -73,7 +73,8 @@ print(json.dumps({'python': platform.python_version(), 'pyside': pyside_version,
 for count in (2500, 5000):
     conn = sqlite3.connect(':memory:')
     conn.create_function('CASEFOLD', 1, lambda value: str(value or '').casefold())
-    for migration in MIGRATIONS:
+    # This benchmark characterizes the original 007 legacy-schema workflow.
+    for migration in MIGRATIONS[:3]:
         migration(conn)
     prompt = ('<p>Questão curta</p>' if light else '<p>' + ('Texto de exemplo para avaliação. ' * 50)
               + '</p><img src="data:image/png;base64,' + png + '">')

@@ -13,23 +13,32 @@ Desenvolvido por **Pedro Trevisan** em Python, utilizando PySide6, SQLite e pyth
 - Formatação de texto e equações em enunciados, alternativas e respostas esperadas; imagens nos enunciados.
 - Busca com filtros por categoria, texto, dificuldade, tipo, ano/série, fonte e ano de origem.
 - Seleção de questões para composição de provas.
+- Provas salvas com nome, turma, ordem das questões e opções de geração.
+- Histórico de uso das questões e filtros por questões nunca usadas ou não usadas desde uma data.
 - Exportação de provas para Word, com questões em ordem escolhida, versões numeradas e gabarito opcional em arquivo separado.
 - Geração de múltiplas versões, com embaralhamento de questões e alternativas e opção de preservar a ordem das alternativas de uma questão.
 - Interface com temas claro e escuro.
 
-## Novidades da versão 1.1
+## Novidades da versão 2.0.0
 
-- Campos opcionais de **fonte da questão** e **ano de origem**.
-- Novos filtros de busca por fonte e ano de origem.
-- Exibição dessas informações nos cartões das questões.
-- Ajustes na interface para Windows, incluindo tipografia, espaçamento, ícones e aparência dos controles.
-- Atualização automática da estrutura dos bancos existentes para incluir os novos campos.
+- Edição e duplicação de questões, com preservação do conteúdo formatado.
+- Categorias que podem ser renomeadas e movidas; filtrar uma categoria também inclui suas subcategorias.
+- Busca pelo texto visível, sem diferenciar maiúsculas ou acentos, incluindo alternativas e respostas esperadas.
+- Questões de múltipla escolha com duas a cinco alternativas.
+- Resultados paginados, seleção preservada entre páginas e filtro por intervalo do ano de origem.
+- Provas salvas por turma, histórico de uso e regeneração com preservação das ordens compatíveis.
+- Melhorias na exportação Word, nas imagens, nos gabaritos e na identificação das versões.
+- Atualização dos bancos com backup automático e relatório dos valores que precisam de revisão.
+
+O código-fonte está preparado para a versão 2.0.0. A compilação e a verificação
+dos executáveis Windows e macOS ainda estão pendentes; não há novos aplicativos
+compilados nesta preparação. Consulte as [notas da versão](docs/releases/v2.0.0.md).
 
 O ano de origem identifica quando a questão foi publicada ou aplicada. Ele é independente do ano/série escolar ao qual a questão se destina.
 
 ## Como usar no Windows
 
-1. Baixe o arquivo `Prometheus1.1.exe` disponibilizado na seção **Releases** deste repositório.
+1. Baixe o executável Windows da versão publicada na seção **Releases** deste repositório. A preparação do código-fonte 2.0.0 não significa que o executável dessa versão já foi publicado.
 2. Salve o executável em uma pasta de sua preferência.
 3. Abra o arquivo para iniciar o aplicativo.
 
@@ -40,11 +49,16 @@ A versão executável inclui as dependências necessárias. Não é preciso inst
 1. **Escolha a disciplina:** crie um banco de questões ou abra um banco existente.
 2. **Cadastre as questões:** informe os dados, selecione as categorias e preencha o enunciado, as alternativas ou a resposta esperada.
 3. **Busque e selecione:** utilize os filtros e marque as questões que deseja incluir na prova.
-4. **Gere a prova:** configure o gabarito, as versões e o embaralhamento; depois salve os arquivos Word.
+4. **Salve e gere a prova:** informe o nome e a turma, ajuste a ordem, o gabarito, as versões e o embaralhamento; depois salve os arquivos Word. Provas salvas podem ser retomadas posteriormente.
 
 ## Bancos de dados e backups
 
 As questões são armazenadas localmente em arquivos SQLite (`.db`).
+
+Antes de atualizar um banco antigo, confira o caminho exibido e mantenha uma
+cópia de segurança. **Não abra um banco atualizado em versões antigas do
+Prometheus:** elas não mostrarão as alterações corretamente. Leia o relatório de
+atualização e revise os valores indicados, sem substituir seu banco pelo backup.
 
 No Windows, a configuração e o banco padrão ficam na pasta:
 

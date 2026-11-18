@@ -2,6 +2,7 @@ import sqlite3
 import pytest
 from prometheus.storage.database import (BankNotFoundError, BankState, BankTooNewError,
     BankError, NotABankError, inspect_bank, open_bank)
+from prometheus.storage.migrations import SCHEMA_VERSION
 
 
 def test_missing_is_never_created(tmp_path):
@@ -39,7 +40,7 @@ def test_future_and_old_bank_are_not_changed(tmp_path):
     with sqlite3.connect(path) as conn:
         conn.execute('CREATE TABLE questoes (id)')
         conn.execute('CREATE TABLE assuntos (id)')
-        conn.execute('PRAGMA user_version=4')
+        conn.execute(f'PRAGMA user_version={SCHEMA_VERSION + 1}')
     before = path.read_bytes()
     with pytest.raises(BankTooNewError): open_bank(path)
     assert path.read_bytes() == before
@@ -54,7 +55,7 @@ def test_current_bank_opens(tmp_path):
     with sqlite3.connect(path) as conn:
         conn.execute('CREATE TABLE questoes (id)')
         conn.execute('CREATE TABLE assuntos (id)')
-        conn.execute('PRAGMA user_version=3')
+        conn.execute(f'PRAGMA user_version={SCHEMA_VERSION}')
     conn = open_bank(path)
     assert conn.execute("SELECT CASEFOLD('Á')").fetchone()[0] == 'á'
     assert conn.execute('PRAGMA foreign_keys').fetchone()[0] == 1
@@ -64,7 +65,7 @@ def test_current_bank_opens(tmp_path):
 def test_create_requires_explicit_request_and_never_replaces(tmp_path):
     path = tmp_path / 'new.db'
     conn = open_bank(path, create=True)
-    assert conn.execute('PRAGMA user_version').fetchone()[0] == 3
+    assert conn.execute('PRAGMA user_version').fetchone()[0] == SCHEMA_VERSION
     conn.close()
     original = path.read_bytes()
     with pytest.raises(FileExistsError): open_bank(path, create=True)
@@ -77,9 +78,10 @@ def test_upgrade_makes_backup_and_preserves_rows(tmp_path):
         conn.execute('CREATE TABLE questoes (id INTEGER PRIMARY KEY, enunciado TEXT)')
         conn.execute('CREATE TABLE assuntos (id INTEGER PRIMARY KEY, nome TEXT)')
         conn.execute("INSERT INTO questoes VALUES (1, 'keep')")
-    conn = open_bank(path, backup_dir=tmp_path, confirm_delete=lambda p: True)
+    conn = open_bank(path, backup_dir=tmp_path, confirm_delete=lambda p: True,
+                     confirm_upgrade=lambda p: True, report_upgrade=lambda report: None)
     assert conn.execute('SELECT enunciado FROM questoes').fetchone() == ('keep',)
-    assert conn.execute('PRAGMA user_version').fetchone()[0] == 3
+    assert conn.execute('PRAGMA user_version').fetchone()[0] == SCHEMA_VERSION
     conn.close()
     backups = list((tmp_path / 'backups').rglob('*.db'))
     assert len(backups) == 1
@@ -100,7 +102,8 @@ def test_failed_migration_rolls_back(tmp_path, monkeypatch):
         raise RuntimeError('simulated failure')
     monkeypatch.setattr(database, 'MIGRATIONS', (fail,))
     with pytest.raises(RuntimeError):
-        open_bank(path, backup_dir=tmp_path, confirm_delete=lambda p: True)
+        open_bank(path, backup_dir=tmp_path, confirm_delete=lambda p: True,
+                  confirm_upgrade=lambda p: True, report_upgrade=lambda report: None)
     assert path.read_bytes() == before
     assert len(list((tmp_path / 'backups').rglob('*.db'))) == 1
 
@@ -116,6 +119,7 @@ def test_declining_backup_retention_cancels_upgrade(tmp_path):
             automatic(conn, path, tmp_path, lambda p: True)
     original = path.read_bytes()
     with pytest.raises(BackupCancelled):
-        open_bank(path, backup_dir=tmp_path, confirm_delete=lambda p: False)
+        open_bank(path, backup_dir=tmp_path, confirm_delete=lambda p: False,
+                  confirm_upgrade=lambda p: True, report_upgrade=lambda report: None)
     assert path.read_bytes() == original
     assert len(list((tmp_path / 'backups').rglob('*.db'))) == 3
