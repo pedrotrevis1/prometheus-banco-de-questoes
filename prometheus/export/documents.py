@@ -9,6 +9,7 @@ from docx.shared import Pt
 from PySide6.QtGui import QFont, QTextCharFormat, QTextDocument
 
 from prometheus.export.images import ImageReadError, append_image, embed_html_images, ensure_exportable, read_image
+from prometheus.domain.exam_questions import as_exam_question
 
 
 def _footer(doc, version_number):
@@ -73,10 +74,10 @@ def _write_answer_key(doc, questions, version_number, acknowledged):
     title = 'Gabarito Oficial' + (f' — Versão {version_number}' if version_number is not None else '')
     doc.add_heading(title, level=1)
     for index, question in enumerate(questions, start=1):
-        if question[3] == 'Múltipla Escolha':
-            p = doc.add_paragraph(); p.add_run(f'{index}) ').bold = True; p.add_run(str(question[10] or ''))
-        elif question[10] and question[10].strip():
-            _append_html(doc, question[0], question[10], f'{index}) Resolução Esperada:\n', acknowledged)
+        if question.kind == 'multiple_choice':
+            p = doc.add_paragraph(); p.add_run(f'{index}) ').bold = True; p.add_run(str(question.answer or ''))
+        elif question.answer and question.answer.strip():
+            _append_html(doc, question.id, question.answer, f'{index}) Resolução Esperada:\n', acknowledged)
         else:
             p = doc.add_paragraph(); p.add_run(f'{index}) Resolução Esperada: ').bold = True
             p.add_run('Sem resolução cadastrada no sistema.')
@@ -85,16 +86,17 @@ def _write_answer_key(doc, questions, version_number, acknowledged):
 def build_exam_documents(questions, *, version_number=None, answer_placement='end', acknowledge_images=False, acknowledged_images=None):
     if answer_placement not in ('end', 'separate', 'none'):
         raise ValueError('invalid answer placement')
+    questions = [as_exam_question(question) for question in questions]
     acknowledged = ensure_exportable(questions, include_answers=answer_placement != 'none',
                                     acknowledge=acknowledge_images, acknowledged=acknowledged_images)
     exam = Document(); _footer(exam, version_number)
     if version_number is not None:
         exam.add_paragraph(f'Versão {version_number}')
     for index, question in enumerate(questions, start=1):
-        _append_html(exam, question[0], question[4], f'{index}) ', acknowledged)
-        if question[3] == 'Múltipla Escolha':
-            for letter, alternative in zip('ABCDE', question[5:10]):
-                _append_html(exam, question[0], alternative or '', f'{letter}) ', acknowledged)
+        _append_html(exam, question.id, question.statement, f'{index}) ', acknowledged)
+        if question.kind == 'multiple_choice':
+            for letter, alternative in zip('ABCDE', question.alternatives):
+                _append_html(exam, question.id, alternative or '', f'{letter}) ', acknowledged)
         exam.add_paragraph('')
     key = None
     if answer_placement == 'end':

@@ -1,6 +1,16 @@
 from prometheus.domain.exam_order import ExamOrder
+from prometheus.domain.exam_arrangements import capture_arrangements, restore_arrangements
+from prometheus.domain.usage_history import format_usage_history
+from prometheus.storage import saved_exams
+from prometheus.domain.card_data import legacy_card_data
+from prometheus.domain.category_tree_state import snapshot_checked, restore_checked
+from prometheus.domain.category_selection import reconcile_applied_categories
+from prometheus.domain.normalization import format_upgrade_report
 from prometheus.domain.versions import generate_versions
 from prometheus.storage.exams import fetch_ordered_questions, fetch_question_summaries
+from prometheus.storage.normalized_exams import (fetch_ordered_questions as fetch_normalized_exam_questions,
+    fetch_question_summaries as fetch_normalized_question_summaries)
+from prometheus.domain.normalized_versions import generate_versions as generate_normalized_versions
 from prometheus.export.documents import build_exam_documents, exam_content_fingerprint
 from prometheus.export.files import output_paths, publish_documents, PublicationError
 from prometheus.export.images import inspect_question_images
@@ -8,11 +18,19 @@ from prometheus.export.images import embed_html_images, clipboard_image_data, Im
 from prometheus.domain.questions import (RichContent, QuestionDraft, QuestionValidationError,
     QuestionSession, format_last_modified, split_available_categories, stored_school_years, validate_question)
 from prometheus.storage.questions import get_question, insert_question, update_question
+from prometheus.storage.normalized_questions import delete_questions as delete_normalized_questions
+from prometheus.storage.normalized_questions import get_question as get_normalized_question, save_question as save_normalized_question
+from prometheus.domain.normalized_questions import from_form as normalized_question_from_form
 from prometheus.domain.preview import legacy_drag_height, PreviewSizing
 from prometheus.domain.source_years import validate_year_range, YearRangeError
 from prometheus.domain.search import SearchFilters, SearchViewState
 from prometheus.storage.search import page_questions
+from prometheus.storage.normalized_search import NormalizedSearchFilters, page_questions as page_normalized_questions
+from prometheus.storage.normalized_display import question_card_row
+from prometheus.domain.normalization import DIFFICULTIES, KINDS, YEARS
 from prometheus.storage import database as storage_database
+from prometheus.storage import categories as storage_categories
+from prometheus.storage.normalization_migration import CategoryMigrationError
 from prometheus.storage import backup as storage_backup
 from prometheus.storage import config as storage_config
 from prometheus.resources import asset_path
@@ -33,10 +51,10 @@ from PySide6.QtWidgets import (
     QComboBox, QTextEdit, QCheckBox, QMessageBox, QScrollArea,
     QFrame, QButtonGroup, QSizePolicy, QStyledItemDelegate, QListView,
     QTreeWidget, QTreeWidgetItem, QListWidget, QDialog, QFormLayout, QToolButton, QInputDialog,
-    QRadioButton, QGridLayout, QProxyStyle, QStyle, QHeaderView, QStyleFactory, QSpinBox,
+    QRadioButton, QGridLayout, QProxyStyle, QStyle, QHeaderView, QStyleFactory, QSpinBox, QDateEdit,
     QStyleOptionComboBox, QStyleOptionSpinBox
 )
-from PySide6.QtCore import Qt, QByteArray, QBuffer, QIODevice, QPoint, QPointF, QRectF, QSize, QTimer, QEvent, QMimeData
+from PySide6.QtCore import Qt, QByteArray, QBuffer, QIODevice, QPoint, QPointF, QRectF, QSize, QTimer, QEvent, QMimeData, QDate
 from PySide6.QtGui import QFont, QPalette, QIcon, QIconEngine, QTextImageFormat, QImage, QPixmap, QTextCharFormat, QTextCursor, QPainter, QPen, QPolygon, QPainterPath, QColor
 
 APP_NAME = "Prometheus - Banco de Questões"
@@ -491,8 +509,11 @@ class AddSubjectDialog(QDialog):
         self.tree_parent.setCurrentItem(root_choice)
         try:
             cursor = self.conn.cursor()
-            cursor.execute("SELECT id, nome, parent_id FROM assuntos ORDER BY nome COLLATE NOCASE")
-            rows = cursor.fetchall()
+            if self.conn.execute('PRAGMA user_version').fetchone()[0] >= 4:
+                rows = storage_categories.list_categories(self.conn)
+            else:
+                cursor.execute("SELECT id, nome, parent_id FROM assuntos ORDER BY nome COLLATE NOCASE")
+                rows = cursor.fetchall()
             children_by_parent = {}
             for subject_id, name, parent_id in rows:
                 children_by_parent.setdefault(parent_id, []).append((subject_id, name))
@@ -523,12 +544,15 @@ class AddSubjectDialog(QDialog):
             return
             
         try:
-            cursor = self.conn.cursor()
-            cursor.execute("INSERT INTO assuntos (nome, parent_id) VALUES (?, ?)", (name, parent_id))
-            self.conn.commit()
+            if self.conn.execute('PRAGMA user_version').fetchone()[0] >= 4:
+                storage_categories.create_category(self.conn, name, parent_id)
+            else:
+                cursor = self.conn.cursor()
+                cursor.execute("INSERT INTO assuntos (nome, parent_id) VALUES (?, ?)", (name, parent_id))
+                self.conn.commit()
             self.show_alert("Sucesso", f"Categoria '{name}' cadastrada com sucesso!", QMessageBox.Information)
             self.accept()
-        except sqlite3.IntegrityError:
+        except (sqlite3.IntegrityError, storage_categories.CategoryError):
             self.show_alert("Erro", "Esta categoria já existe no sistema.", QMessageBox.Warning)
         except Exception as e:
             self.show_alert("Erro", f"Falha ao salvar:\n{str(e)}", QMessageBox.Critical)
@@ -582,7 +606,7 @@ class InsertEquationDialog(QDialog):
 class QuestionCard(QFrame):
     def __init__(self, q_id, subject, difficulty, ano, q_type, html_content, is_selected, toggle_callback,
                  question_source="", source_year="", result_viewport=None,
-                 edit_callback=None, duplicate_callback=None, last_modified=None):
+                 edit_callback=None, duplicate_callback=None, last_modified=None, usage_text=""):
         super().__init__()
         self.q_id = q_id
         self._result_viewport = result_viewport
@@ -604,7 +628,7 @@ class QuestionCard(QFrame):
             f"ID: {q_id} | Segmento/Ano: {ano} | {difficulty} | {q_type}\n"
             f"Assunto: {display_subject}\n"
             f"Fonte da Questão: {display_source} | Ano: {display_source_year}\n"
-            f"Última alteração: {modified_label}"
+            f"Última alteração: {modified_label}" + (f"\nUsos: {usage_text}" if usage_text else "")
         )
         header_label.setTextFormat(Qt.PlainText)
         header_label.setObjectName("CardLabel")
@@ -966,6 +990,8 @@ class ExamGeneratorApp(QMainWindow):
         self.conn = None
         self.search_view = SearchViewState()
         self.exam_order = ExamOrder()
+        self.open_exam_id = None
+        self.exam_snapshot = None
         self.selected_ids = self.search_view.selected_ids
         self.question_session = None
         first_run = not os.path.exists(os.path.join(self.get_data_dir(), "app_config.json"))
@@ -973,6 +999,7 @@ class ExamGeneratorApp(QMainWindow):
         self.current_discipline = self.config_data["current_discipline"]
         self.db_path = self.config_data["disciplines"].get(self.current_discipline, "")
         self.setup_ui()
+        self.exam_snapshot = self.exam_draft()
         self._active_editor = self.txt_prompt
         for editor in (self.txt_prompt, *self.alt_inputs.values(), self.txt_essay_answer):
             editor.installEventFilter(self)
@@ -1043,9 +1070,16 @@ class ExamGeneratorApp(QMainWindow):
             new_conn = storage_database.open_bank(
                 self.db_path, create=create, backup_dir=self.get_data_dir(),
                 confirm_delete=lambda path: self.show_confirm(
-                    "Excluir backup antigo", f"Para continuar a atualização, excluir o backup antigo?\n\n{path}"))
+                    "Excluir backup antigo", f"Para continuar a atualização, excluir o backup antigo?\n\n{path}"),
+                confirm_upgrade=lambda path: self.show_confirm(
+                    "Atualizar banco de questões",
+                    f"O banco será atualizado e um backup será criado. Não abra o banco atualizado em versões antigas do Prometheus: elas não mostrarão as alterações corretamente.\n\n{path}\n\nDeseja continuar?"),
+                report_upgrade=lambda rows: self.show_alert(
+                    "Relatório da atualização",
+                    format_upgrade_report(rows),
+                    QMessageBox.Information if not rows else QMessageBox.Warning))
             storage_database.seed_biology_categories(new_conn, self.current_discipline)
-        except storage_backup.BackupCancelled:
+        except (storage_backup.BackupCancelled, storage_database.UpgradeCancelled):
             return False
         except storage_database.BankNotFoundError:
             return self.handle_missing_bank(candidate)
@@ -1054,6 +1088,9 @@ class ExamGeneratorApp(QMainWindow):
             return False
         except storage_database.BankTooNewError:
             self.show_alert("Atualização necessária", "Este banco foi criado por uma versão mais nova do Prometheus. Atualize o aplicativo para abri-lo.", QMessageBox.Warning)
+            return False
+        except CategoryMigrationError as error:
+            self.show_alert("Atualização não concluída", f"A categoria de ID {error.category_id} possui um nome ou uma hierarquia inválida. O banco não foi alterado; o backup foi preservado.", QMessageBox.Warning)
             return False
         except Exception as e:
             if new_conn:
@@ -1064,6 +1101,16 @@ class ExamGeneratorApp(QMainWindow):
             new_conn.close()
             return False
         old_conn, self.conn = self.conn, new_conn
+        normalized = self.conn.execute('PRAGMA user_version').fetchone()[0] >= 4
+        self.lbl_register_segment.setVisible(not normalized)
+        for radio in self.segment_radios.values():
+            radio.setVisible(not normalized)
+        self.alternative_count.setVisible(normalized)
+        self.btn_rename_category.setVisible(normalized)
+        self.btn_move_category.setVisible(normalized)
+        self.alternative_count.setValue(5)
+        self.update_alternative_count(5)
+        self.populate_year_options(self.checked_radio_text(self.segment_group))
         if old_conn:
             try:
                 old_conn.close()
@@ -1073,6 +1120,11 @@ class ExamGeneratorApp(QMainWindow):
         self.setWindowTitle(f"{APP_NAME} — {database_name}")
         self.selected_ids.clear()
         self.exam_order.synchronize(self.selected_ids)
+        self.open_exam_id = None
+        self.refresh_saved_exam_controls()
+        self.cb_exam_class.setCurrentIndex(0)
+        self.lbl_open_exam.setText("Prova aberta: nenhuma")
+        self.exam_snapshot = self.exam_draft()
         self.search_view.set_selected_only(False)
         if hasattr(self, "lbl_selected_count"):
             self.lbl_selected_count.setText("0 questão(ões) selecionada(s) para a prova")
@@ -1084,7 +1136,7 @@ class ExamGeneratorApp(QMainWindow):
             self.btn_browse_selected_questions.blockSignals(False)
             self.update_multi_version_controls()
         self.reset_question_form()
-        self.reload_all_trees()
+        self.reload_all_trees(preserve=False)
         applied = self.search_view.applied
         self.search_view.apply(self.current_search_filters((applied.source_year_from, applied.source_year_to)))
         self.load_questions()
@@ -1386,7 +1438,7 @@ class ExamGeneratorApp(QMainWindow):
         if new_discipline not in self.config_data['disciplines']:
             self.refresh_disciplines_dropdown()
             return
-        if not self.confirm_discard_question():
+        if not self.confirm_discard_question() or not self.confirm_save_exam():
             self.refresh_disciplines_dropdown()
             return
         old_name, old_path = self.current_discipline, self.db_path
@@ -1401,7 +1453,7 @@ class ExamGeneratorApp(QMainWindow):
         self.txt_db_path.setText(self.db_path)
 
     def action_create_new_database(self):
-        if not self.confirm_discard_question():
+        if not self.confirm_discard_question() or not self.confirm_save_exam():
             return
         disc_name = self.get_text_prompt("Nova Disciplina", "Digite o nome da nova Disciplina (ex: Matemática, História):")
         if not disc_name: return
@@ -1429,7 +1481,7 @@ class ExamGeneratorApp(QMainWindow):
         self.show_alert("Sucesso", f"Disciplina '{disc_name}' criada com sucesso!", QMessageBox.Information)
 
     def action_link_existing_database(self):
-        if not self.confirm_discard_question():
+        if not self.confirm_discard_question() or not self.confirm_save_exam():
             return
         file_path, _ = QFileDialog.getOpenFileName(self, "Abrir Banco de Dados (.db)", "", "SQLite Database (*.db)")
         if not file_path: return
@@ -1477,7 +1529,7 @@ class ExamGeneratorApp(QMainWindow):
         self.refresh_disciplines_dropdown()
 
     def action_remove_discipline(self):
-        if not self.confirm_discard_question():
+        if not self.confirm_discard_question() or not self.confirm_save_exam():
             return
         name = self.current_discipline
         if not name:
@@ -1503,13 +1555,17 @@ class ExamGeneratorApp(QMainWindow):
                 self.conn.close()
                 self.conn = None
             self.current_discipline, self.db_path = '', ''
+            self.open_exam_id = None
             self.selected_ids.clear()
             self.exam_order.synchronize(self.selected_ids)
+            self.refresh_saved_exam_controls()
+            self.lbl_open_exam.setText("Prova aberta: nenhuma")
+            self.exam_snapshot = self.exam_draft()
             self.lbl_selected_count.setText("0 questão(ões) selecionada(s) para a prova")
             self.btn_delete_selected_questions.setEnabled(False)
             self.btn_browse_selected_questions.setEnabled(False)
             self.reset_question_form()
-            self.reload_all_trees()
+            self.reload_all_trees(preserve=False)
             while self.scroll_layout.count():
                 widget = self.scroll_layout.takeAt(0).widget()
                 if widget:
@@ -1557,8 +1613,11 @@ class ExamGeneratorApp(QMainWindow):
         if not self.conn: return
         try:
             cursor = self.conn.cursor()
-            cursor.execute("SELECT id, nome, parent_id FROM assuntos")
-            all_rows = cursor.fetchall()
+            if self.conn.execute('PRAGMA user_version').fetchone()[0] >= 4:
+                all_rows = storage_categories.list_categories(self.conn)
+            else:
+                cursor.execute("SELECT id, nome, parent_id FROM assuntos")
+                all_rows = cursor.fetchall()
             roots = [r for r in all_rows if r[2] is None]
             children = [c for c in all_rows if c[2] is not None]
             
@@ -1591,9 +1650,16 @@ class ExamGeneratorApp(QMainWindow):
             )
         )
 
-    def reload_all_trees(self):
+    def reload_all_trees(self, preserve=True):
+        register_checks = snapshot_checked(self.tree_register_subjects) if preserve else None
+        search_checks = snapshot_checked(self.tree_search_subjects) if preserve else None
         self.build_subject_tree(self.tree_register_subjects)
         self.build_search_subjects_tree(self.tree_search_subjects)
+        restore_checked(self.tree_register_subjects, register_checks)
+        restore_checked(self.tree_search_subjects, search_checks)
+        if preserve and self.conn and self.conn.execute('PRAGMA user_version').fetchone()[0] >= 4:
+            self.search_view.applied = reconcile_applied_categories(
+                self.search_view.applied, (row[0] for row in storage_categories.list_categories(self.conn)))
 
     def filter_tree_by_text(self, text, tree_widget):
         search_token = text.lower().strip()
@@ -1628,6 +1694,12 @@ class ExamGeneratorApp(QMainWindow):
         confirm = self.show_confirm("Confirmar Exclusão", f"Tem certeza que deseja deletar a categoria '{subject_name}' e todas as suas subcategorias do banco?")
         if confirm:
             try:
+                if self.conn.execute('PRAGMA user_version').fetchone()[0] >= 4:
+                    storage_categories.delete_category(self.conn, subject_id)
+                    self.show_alert("Sucesso", f"Categoria '{subject_name}' deletada!", QMessageBox.Information)
+                    self.reload_all_trees()
+                    self.load_questions(selected_only=self.search_view.selected_only)
+                    return
                 cursor = self.conn.cursor()
                 cursor.execute("SELECT id, nome, parent_id FROM assuntos")
                 rows = cursor.fetchall()
@@ -1661,6 +1733,39 @@ class ExamGeneratorApp(QMainWindow):
         dlg.setStyleSheet(self.styleSheet())
         if dlg.exec() == QDialog.Accepted:
             self.reload_all_trees()
+
+    def rename_selected_category(self):
+        item = self.tree_register_subjects.currentItem()
+        if item is None:
+            self.show_alert("Aviso", "Selecione uma categoria.", QMessageBox.Warning)
+            return
+        name = self.get_text_prompt("Renomear categoria", "Novo nome:")
+        if not name:
+            return
+        try:
+            storage_categories.rename_category(self.conn, item.data(0, Qt.UserRole), name)
+            self.reload_all_trees()
+            self.load_questions(selected_only=self.search_view.selected_only)
+        except storage_categories.CategoryError:
+            self.show_alert("Aviso", "Nome inválido ou já existente nesta categoria.", QMessageBox.Warning)
+
+    def move_selected_category(self):
+        item = self.tree_register_subjects.currentItem()
+        if item is None:
+            self.show_alert("Aviso", "Selecione uma categoria.", QMessageBox.Warning)
+            return
+        paths = storage_categories.category_paths(self.conn)
+        labels = ['Nenhuma — categoria principal'] + [f'{label} (ID {category_id})' for category_id, label in paths]
+        selected, accepted = QInputDialog.getItem(self, 'Mover categoria', 'Mover para:', labels, 0, False)
+        if not accepted:
+            return
+        parent = None if selected == labels[0] else paths[labels.index(selected) - 1][0]
+        try:
+            storage_categories.move_category(self.conn, item.data(0, Qt.UserRole), parent)
+            self.reload_all_trees()
+            self.load_questions(selected_only=self.search_view.selected_only)
+        except storage_categories.CategoryError:
+            self.show_alert("Aviso", "Não é possível mover a categoria para este local.", QMessageBox.Warning)
 
     # --- TAB 1: REGISTER QUESTION WITH WYSIWYG ---
     def setup_tab_register(self):
@@ -1716,7 +1821,8 @@ class ExamGeneratorApp(QMainWindow):
         self.chk_keep_alternative_order.setToolTip("Não embaralhar as alternativas desta questão ao gerar versões.")
         left_col.addWidget(self.chk_keep_alternative_order)
 
-        left_col.addWidget(QLabel("Segmento:"))
+        self.lbl_register_segment = QLabel("Segmento:")
+        left_col.addWidget(self.lbl_register_segment)
         segment_layout = QHBoxLayout()
         self.segment_group = QButtonGroup(self)
         self.segment_radios = {}
@@ -1875,8 +1981,17 @@ class ExamGeneratorApp(QMainWindow):
         alts_layout.setSpacing(10)
         
         self.alt_inputs = {}
+        self.alt_row_widgets = {}
         self.alt_radios = QButtonGroup(self)
         self.alt_radios.setExclusive(True)
+
+        self.alternative_count = QSpinBox()
+        self.alternative_count.setRange(2, 5)
+        self.alternative_count.setValue(5)
+        self.alternative_count.setPrefix('Quantidade de alternativas: ')
+        self.alternative_count.valueChanged.connect(self.update_alternative_count)
+        self.alternative_count.hide()
+        alts_layout.addWidget(self.alternative_count)
 
         for letter in ['A', 'B', 'C', 'D', 'E']:
             row = QHBoxLayout()
@@ -1892,6 +2007,7 @@ class ExamGeneratorApp(QMainWindow):
             alts_layout.addLayout(row)
             
             self.alt_inputs[letter] = txt
+            self.alt_row_widgets[letter] = (lbl, txt, chk)
             self.alt_radios.addButton(chk, ord(letter))
 
         left_col.addWidget(self.alts_container)
@@ -1946,6 +2062,16 @@ class ExamGeneratorApp(QMainWindow):
         actions_sub_layout.addWidget(btn_new_subject)
         actions_sub_layout.addWidget(btn_del_subject)
         right_col.addLayout(actions_sub_layout)
+        category_edit_layout = QHBoxLayout()
+        self.btn_rename_category = QPushButton('Renomear')
+        self.btn_rename_category.clicked.connect(self.rename_selected_category)
+        self.btn_move_category = QPushButton('Mover')
+        self.btn_move_category.clicked.connect(self.move_selected_category)
+        self.btn_rename_category.hide()
+        self.btn_move_category.hide()
+        category_edit_layout.addWidget(self.btn_rename_category)
+        category_edit_layout.addWidget(self.btn_move_category)
+        right_col.addLayout(category_edit_layout)
 
         left_content = QWidget()
         left_content.setObjectName("RegisterScrollContent")
@@ -2078,6 +2204,18 @@ class ExamGeneratorApp(QMainWindow):
             traverse(tree_widget.topLevelItem(i))
         return checked_names
 
+    def get_checked_subject_ids(self, tree_widget):
+        checked = []
+        def traverse(item):
+            value = item.data(0, Qt.UserRole)
+            if item.checkState(0) == Qt.Checked and value is not None:
+                checked.append(value)
+            for index in range(item.childCount()):
+                traverse(item.child(index))
+        for index in range(tree_widget.topLevelItemCount()):
+            traverse(tree_widget.topLevelItem(index))
+        return checked
+
     def toggle_question_type(self, q_type):
         if hasattr(self, 'chk_keep_alternative_order'):
             self.chk_keep_alternative_order.setEnabled(q_type == "Múltipla Escolha")
@@ -2092,6 +2230,17 @@ class ExamGeneratorApp(QMainWindow):
             self.alts_container.setVisible(False)
             self.essay_container.setVisible(True)
 
+    def update_alternative_count(self, count):
+        for index, letter in enumerate('ABCDE'):
+            for widget in self.alt_row_widgets.get(letter, ()):
+                widget.setVisible(index < count)
+            if index >= count:
+                button = self.alt_radios.button(ord(letter))
+                if button and button.isChecked():
+                    self.alt_radios.setExclusive(False)
+                    button.setChecked(False)
+                    self.alt_radios.setExclusive(True)
+
     def populate_year_options(self, segment):
         while self.year_options_layout.count():
             item = self.year_options_layout.takeAt(0)
@@ -2102,7 +2251,9 @@ class ExamGeneratorApp(QMainWindow):
                 widget.deleteLater()
         self.year_checkboxes.clear()
 
-        if segment == "Ensino Fundamental":
+        if self.conn and self.conn.execute('PRAGMA user_version').fetchone()[0] >= 4:
+            labels = ("6º Ano", "7º Ano", "8º Ano", "9º Ano", "1ª Série", "2ª Série", "3ª Série")
+        elif segment == "Ensino Fundamental":
             labels = ("6º Ano", "7º Ano", "8º Ano", "9º Ano")
         else:
             labels = ("1ª Série", "2ª Série", "3ª Série")
@@ -2164,13 +2315,16 @@ class ExamGeneratorApp(QMainWindow):
         def content(editor):
             return RichContent(editor.toHtml(), bool(editor.toPlainText().strip()))
         checked = self.alt_radios.checkedButton()
+        normalized = self.conn and self.conn.execute('PRAGMA user_version').fetchone()[0] >= 4
+        count = self.alternative_count.value() if normalized else 5
         return QuestionDraft(
-            categories=tuple(self.get_checked_subjects(self.tree_register_subjects)),
+            categories=tuple(self.get_checked_subject_ids(self.tree_register_subjects) if normalized else
+                             self.get_checked_subjects(self.tree_register_subjects)),
             difficulty=self.checked_radio_text(self.diff_group), kind=self.cb_type.currentText(),
             statement=content(self.txt_prompt),
             years=tuple(label for label, checkbox in self.year_checkboxes.items() if checkbox.isChecked()),
-            segment=self.checked_radio_text(self.segment_group),
-            alternatives=tuple(content(self.alt_inputs[letter]) for letter in 'ABCDE'),
+            segment='multi' if normalized else self.checked_radio_text(self.segment_group),
+            alternatives=tuple(content(self.alt_inputs[letter]) for letter in 'ABCDE'[:count]),
             answer=chr(self.alt_radios.id(checked)) if checked else '',
             essay_answer=content(self.txt_essay_answer),
             source=self.txt_question_source.text(), source_year=self.txt_source_year.text(),
@@ -2182,6 +2336,26 @@ class ExamGeneratorApp(QMainWindow):
             self.show_alert("Erro", "O banco de dados não está conectado.", QMessageBox.Critical)
             return
         draft = self.question_draft_from_form()
+        normalized = self.conn.execute('PRAGMA user_version').fetchone()[0] >= 4
+        if normalized:
+            try:
+                session = self.question_session
+                if session:
+                    draft = session.prepare(draft)
+                question = normalized_question_from_form(draft)
+                question_id = session.question_id if session and session.mode == 'edit' else None
+                save_normalized_question(self.conn, question, question_id)
+                self.show_alert("Sucesso", "Questão salva com sucesso!", QMessageBox.Information)
+                self.question_session = None
+                self.lbl_register_title.setText("Cadastrar Nova Questão")
+                self.btn_cancel_edit.hide()
+                self.clear_register_form()
+                self.load_questions(selected_only=self.search_view.selected_only)
+            except (ValueError, LookupError):
+                self.show_alert("Aviso", "Não foi possível salvar a questão. Verifique as categorias, a classificação, os anos e as alternativas.", QMessageBox.Warning)
+            except Exception as error:
+                self.show_alert("Erro", f"Falha ao salvar no banco:\n{error}", QMessageBox.Critical)
+            return
         try:
             validate_question(draft)
         except QuestionValidationError as error:
@@ -2226,7 +2400,7 @@ class ExamGeneratorApp(QMainWindow):
         return not dirty or self.show_confirm("Descartar alterações", "Há alterações não salvas na questão. Deseja descartá-las?")
 
     def closeEvent(self, event):
-        if not self.confirm_discard_question():
+        if not self.confirm_discard_question() or not self.confirm_save_exam():
             event.ignore()
             return
         super().closeEvent(event)
@@ -2241,6 +2415,9 @@ class ExamGeneratorApp(QMainWindow):
 
     def open_question_for_edit(self, question_id, duplicate=False):
         if not self.conn or not self.confirm_discard_question():
+            return
+        if self.conn.execute('PRAGMA user_version').fetchone()[0] >= 4:
+            self.open_normalized_question_for_edit(question_id, duplicate)
             return
         try:
             row = get_question(self.conn, question_id)
@@ -2294,6 +2471,63 @@ class ExamGeneratorApp(QMainWindow):
                 self.show_alert("Categorias não encontradas", "Categorias não encontradas: " + ', '.join(missing), QMessageBox.Warning)
         except Exception as e:
             self.show_alert("Erro", f"Não foi possível carregar a questão: {e}", QMessageBox.Critical)
+
+    def open_normalized_question_for_edit(self, question_id, duplicate=False):
+        try:
+            row = get_normalized_question(self.conn, question_id)
+            if row is None:
+                self.show_alert("Aviso", "A questão não foi encontrada.", QMessageBox.Warning)
+                return
+            report = self.conn.execute(
+                'SELECT question_id, field, value FROM normalization_report WHERE question_id = ? ORDER BY field, value',
+                (question_id,)).fetchall()
+            if report and not self.show_confirm("Dados da questão precisam de revisão",
+                    format_upgrade_report(report) + "\n\nDeseja continuar a edição? Os valores originais permanecem no backup."):
+                return
+            self.clear_register_form()
+            kinds = {code: label for label, code in KINDS.items()}
+            difficulties = {code: label for label, code in DIFFICULTIES.items()}
+            years = {code: label for label, code in YEARS.items()}
+            self.cb_type.setCurrentIndex(self.cb_type.findText(kinds.get(row['kind'], '')))
+            if row['difficulty'] in difficulties:
+                self.diff_radios[difficulties[row['difficulty']]].setChecked(True)
+            else:
+                self.diff_group.setExclusive(False)
+                for radio in self.diff_radios.values():
+                    radio.setChecked(False)
+                self.diff_group.setExclusive(True)
+            selected_years = {years[year] for year in row['years'] if year in years}
+            for label, checkbox in self.year_checkboxes.items():
+                checkbox.setChecked(label in selected_years)
+            self.txt_question_source.setText(row['source'] or '')
+            self.txt_source_year.setText(row['source_year_raw'] or '')
+            self.chk_keep_alternative_order.setChecked(bool(row['keep_alternative_order']))
+            self.txt_prompt.setHtml(row['statement'] or '')
+            alternatives = row['alternatives']
+            self.alternative_count.setValue(max(2, len(alternatives)) if alternatives else 5)
+            for position, content, correct in alternatives:
+                self.alt_inputs['ABCDE'[position - 1]].setHtml(content or '')
+                if correct:
+                    self.alt_radios.button(ord('ABCDE'[position - 1])).setChecked(True)
+            self.txt_essay_answer.setHtml(row['expected_answer'] or '')
+            def mark(item):
+                item.setCheckState(0, Qt.Checked if item.data(0, Qt.UserRole) in row['category_ids'] else Qt.Unchecked)
+                for index in range(item.childCount()):
+                    mark(item.child(index))
+            for index in range(self.tree_register_subjects.topLevelItemCount()):
+                mark(self.tree_register_subjects.topLevelItem(index))
+            initial = self.question_draft_from_form()
+            original = replace(initial,
+                statement=RichContent(row['statement'] or '', initial.statement.has_text),
+                alternatives=tuple(RichContent(content, shown.has_text) for (_, content, _), shown in
+                                   zip(alternatives, initial.alternatives)),
+                essay_answer=RichContent(row['expected_answer'] or '', initial.essay_answer.has_text))
+            self.question_session = QuestionSession('duplicate' if duplicate else 'edit', question_id, initial, original)
+            self.lbl_register_title.setText("Duplicar Questão" if duplicate else f"Editando questão {question_id}")
+            self.btn_cancel_edit.setVisible(True)
+            self.tabs.setCurrentIndex(0)
+        except Exception as error:
+            self.show_alert("Erro", f"Não foi possível carregar a questão: {error}", QMessageBox.Critical)
 
     def clear_register_form(self):
         self.chk_keep_alternative_order.setChecked(False)
@@ -2381,6 +2615,20 @@ class ExamGeneratorApp(QMainWindow):
             source_year_row.addWidget(label)
             source_year_row.addWidget(field)
         filter_panel.addLayout(source_year_row)
+
+        add_filter_header("Uso em provas:")
+        self.cb_usage_filter = QComboBox()
+        self.cb_usage_filter.addItem("Todas", 'all')
+        self.cb_usage_filter.addItem("Nunca usadas", 'never')
+        self.cb_usage_filter.addItem("Não usadas desde", 'since')
+        self.date_usage_filter = QDateEdit(QDate.currentDate())
+        self.date_usage_filter.setCalendarPopup(True)
+        self.date_usage_filter.setDisplayFormat('dd/MM/yyyy')
+        self.date_usage_filter.setEnabled(False)
+        self.cb_usage_filter.currentIndexChanged.connect(
+            lambda: self.date_usage_filter.setEnabled(self.cb_usage_filter.currentData() == 'since'))
+        filter_panel.addWidget(self.cb_usage_filter)
+        filter_panel.addWidget(self.date_usage_filter)
 
         add_filter_header("Dificuldade:")
         self.search_diff_group = QButtonGroup(self)
@@ -2525,6 +2773,10 @@ class ExamGeneratorApp(QMainWindow):
         all_item.setText(0, "Todas as Categorias")
         all_item.setCheckState(0, Qt.Checked)
         tree_widget.insertTopLevelItem(0, all_item)
+        if self.conn and self.conn.execute('PRAGMA user_version').fetchone()[0] >= 4:
+            uncategorized = QTreeWidgetItem(tree_widget, ['Sem categoria'])
+            uncategorized.setData(0, Qt.UserRole, -1)
+            uncategorized.setCheckState(0, Qt.Unchecked)
         tree_widget.resizeColumnToContents(0)
 
     @staticmethod
@@ -2545,15 +2797,25 @@ class ExamGeneratorApp(QMainWindow):
     def load_questions(self, selected_only=False):
         cards = []
         try:
-            bounds, results = page_questions(
-                self.conn, self.search_view.applied, self.search_view.page,
-                self.selected_ids if selected_only else None)
+            normalized = self.conn.execute('PRAGMA user_version').fetchone()[0] >= 4
+            if normalized:
+                filters = self.search_view.applied
+                if not isinstance(filters, NormalizedSearchFilters):
+                    filters = NormalizedSearchFilters()
+                bounds, ids = page_normalized_questions(self.conn, filters, self.search_view.page,
+                    self.selected_ids if selected_only else None)
+                results = [question_card_row(self.conn, question_id) for question_id in ids]
+            else:
+                bounds, results = page_questions(
+                    self.conn, self.search_view.applied, self.search_view.page,
+                    self.selected_ids if selected_only else None)
+                results = [legacy_card_data(row) for row in results]
 
             for row in results:
-                q_id, sub, dif, ano, segment, q_type, html_prompt = row[:7]
-                alternatives = row[7:12]
-                expected_answer = row[12]
-                question_source, question_source_year = row[13:15]
+                q_id, sub, dif = row.question_id, row.categories, row.difficulty
+                ano, segment, q_type, html_prompt = row.years, row.segment, row.kind, row.statement
+                alternatives, expected_answer = row.alternatives, row.answer
+                question_source, question_source_year = row.source, row.source_year
 
                 is_checked = q_id in self.selected_ids
                 
@@ -2591,7 +2853,9 @@ class ExamGeneratorApp(QMainWindow):
                     result_viewport=self.scroll_area.viewport(),
                     edit_callback=lambda question_id: self.open_question_for_edit(question_id, False),
                     duplicate_callback=lambda question_id: self.open_question_for_edit(question_id, True),
-                    last_modified=row[15]
+                    last_modified=row.last_modified,
+                    usage_text=format_usage_history(saved_exams.question_usages(self.conn, q_id))
+                    if normalized and self.conn.execute('PRAGMA user_version').fetchone()[0] >= 6 else ''
                 )
                 card.checkbox.setStyle(self._selection_style)
                 cards.append(card)
@@ -2624,6 +2888,18 @@ class ExamGeneratorApp(QMainWindow):
     def current_search_filters(self, bounds=None):
         if bounds is None:
             bounds = validate_year_range(self.txt_search_source_year_from.text(), self.txt_search_source_year_to.text())
+        if self.conn and self.conn.execute('PRAGMA user_version').fetchone()[0] >= 4:
+            category_ids = self.get_checked_subject_ids(self.tree_search_subjects)
+            years = self.checked_filter_values(self.search_year_group, "Todos os Anos")
+            return NormalizedSearchFilters(
+                difficulties=tuple(DIFFICULTIES[label] for label in self.checked_filter_values(self.search_diff_group, "Todas as Dificuldades")),
+                kinds=tuple(KINDS[label] for label in self.checked_filter_values(self.search_type_group, "Todos os Tipos")),
+                text=self.txt_search_question_text.text().strip(), source=self.txt_search_question_source.text().strip(),
+                source_year_from=bounds[0], source_year_to=bounds[1],
+                years=tuple(YEARS[label][1] for label in years),
+                category_ids=tuple(value for value in category_ids if value != -1), uncategorized=-1 in category_ids,
+                usage=self.cb_usage_filter.currentData() if self.conn.execute('PRAGMA user_version').fetchone()[0] >= 6 else 'all',
+                unused_since=self.date_usage_filter.date().toString('yyyy-MM-dd'))
         return SearchFilters(
             difficulties=tuple(self.checked_filter_values(self.search_diff_group, "Todas as Dificuldades")),
             question_types=tuple(self.checked_filter_values(self.search_type_group, "Todos os Tipos")),
@@ -2699,19 +2975,26 @@ class ExamGeneratorApp(QMainWindow):
         question_ids = set(self.selected_ids)
         count = len(question_ids)
         database_name = os.path.splitext(os.path.basename(self.db_path))[0] or self.current_discipline
+        exams = (saved_exams.containing_exams(self.conn, question_ids)
+                 if self.conn.execute('PRAGMA user_version').fetchone()[0] >= 6 else [])
+        exam_warning = ("\n\nProvas que contêm estas questões: " +
+                        ", ".join(sorted({name for _, name in exams})) if exams else "")
         if not self.show_confirm(
             "Confirmar exclusão de questões",
             f"Banco de dados: {database_name}\nQuestões selecionadas: {count}\n\n"
-            "Tem certeza de que deseja excluí-las permanentemente? Esta ação não pode ser desfeita."
+            "Tem certeza de que deseja excluí-las permanentemente? Esta ação não pode ser desfeita." + exam_warning
         ):
             return
 
         try:
             placeholders = ",".join("?" for _ in question_ids)
-            cursor = self.conn.cursor()
-            cursor.execute(f"DELETE FROM questoes WHERE id IN ({placeholders})", list(question_ids))
-            deleted_count = cursor.rowcount
-            self.conn.commit()
+            if self.conn.execute('PRAGMA user_version').fetchone()[0] >= 4:
+                deleted_count = delete_normalized_questions(self.conn, question_ids)
+            else:
+                cursor = self.conn.cursor()
+                cursor.execute(f"DELETE FROM questoes WHERE id IN ({placeholders})", list(question_ids))
+                deleted_count = cursor.rowcount
+                self.conn.commit()
             self.selected_ids.difference_update(question_ids)
             self.exam_order.synchronize(self.selected_ids)
             self.lbl_selected_count.setText(f"{len(self.selected_ids)} questão(ões) selecionada(s) para a prova")
@@ -2741,6 +3024,32 @@ class ExamGeneratorApp(QMainWindow):
         lbl_title = QLabel("Configurar e Gerar Arquivo Word (.docx)")
         lbl_title.setObjectName("HeaderLabel")
         content_layout.addWidget(lbl_title)
+
+        saved_row = QHBoxLayout()
+        self.cb_saved_exams = QComboBox()
+        saved_row.addWidget(self.cb_saved_exams, 1)
+        for label, callback in (("Abrir", self.open_saved_exam), ("Salvar", self.save_current_exam),
+                                ("Salvar como", lambda: self.save_current_exam(True)),
+                                ("Renomear", self.rename_saved_exam), ("Duplicar", self.duplicate_saved_exam),
+                                ("Excluir", self.delete_saved_exam)):
+            button = QPushButton(label)
+            button.clicked.connect(callback)
+            saved_row.addWidget(button)
+        content_layout.addLayout(saved_row)
+        self.lbl_open_exam = QLabel("Prova aberta: nenhuma")
+        content_layout.addWidget(self.lbl_open_exam)
+        class_row = QHBoxLayout()
+        class_row.addWidget(QLabel("Turma:"))
+        self.cb_exam_class = QComboBox()
+        self.cb_exam_class.addItem("Sem turma", None)
+        class_row.addWidget(self.cb_exam_class, 1)
+        for label, callback in (("Adicionar turma", self.add_exam_class),
+                                ("Renomear turma", self.rename_exam_class),
+                                ("Excluir turma", self.delete_exam_class)):
+            button = QPushButton(label)
+            button.clicked.connect(callback)
+            class_row.addWidget(button)
+        content_layout.addLayout(class_row)
 
         config_frame = QFrame()
         config_frame.setObjectName("GenerationOptionsPanel")
@@ -2828,6 +3137,160 @@ class ExamGeneratorApp(QMainWindow):
         layout.addWidget(generation_scroll)
         self.tabs.addTab(tab, "Configurar e Gerar Prova")
 
+    def exam_draft(self):
+        settings = {'multiple': self.chk_multiple_versions.isChecked(),
+                    'count': self.spin_version_count.value(),
+                    'shuffle_questions': self.chk_shuffle_questions.isChecked(),
+                    'shuffle_alternatives': self.chk_shuffle_alternatives.isChecked(),
+                    'include_answers': self.chk_include_answers.isChecked(),
+                    'separate_answers': self.chk_separate_answers.isChecked()}
+        return (tuple(self.exam_order.synchronize(self.selected_ids)), self.cb_exam_class.currentData(), settings)
+
+    def refresh_saved_exam_controls(self, selected=None):
+        class_id = self.cb_exam_class.currentData()
+        self.cb_saved_exams.clear()
+        self.cb_exam_class.clear()
+        self.cb_exam_class.addItem("Sem turma", None)
+        if self.conn and self.conn.execute('PRAGMA user_version').fetchone()[0] >= 6:
+            for exam_id, name, class_name in saved_exams.list_exams(self.conn):
+                self.cb_saved_exams.addItem(name + (f" — {class_name}" if class_name else ""), exam_id)
+            for listed_class_id, name in saved_exams.list_classes(self.conn):
+                self.cb_exam_class.addItem(name, listed_class_id)
+        if selected is not None:
+            self.cb_saved_exams.setCurrentIndex(max(0, self.cb_saved_exams.findData(selected)))
+        self.cb_exam_class.setCurrentIndex(max(0, self.cb_exam_class.findData(class_id)))
+
+    def save_current_exam(self, save_as=False):
+        if not self.conn:
+            return False
+        exam_id = None if save_as else self.open_exam_id
+        if exam_id is None:
+            name = self.get_text_prompt("Salvar prova", "Nome da prova:")
+            if not name:
+                return False
+        else:
+            name = saved_exams.load_exam(self.conn, exam_id)['name']
+        ids, class_id, settings = self.exam_draft()
+        try:
+            self.open_exam_id = saved_exams.save_exam(self.conn, name, class_id, settings, ids, exam_id)
+            self.lbl_open_exam.setText(f"Prova aberta: {name}")
+            self.refresh_saved_exam_controls(self.open_exam_id)
+            self.cb_exam_class.setCurrentIndex(max(0, self.cb_exam_class.findData(class_id)))
+            self.exam_snapshot = self.exam_draft()
+            return True
+        except Exception as error:
+            self.show_alert("Erro", f"Não foi possível salvar a prova: {error}", QMessageBox.Warning)
+            return False
+
+    def confirm_save_exam(self):
+        if (not self.conn or self.conn.execute('PRAGMA user_version').fetchone()[0] < 6 or
+                self.exam_snapshot is None or self.exam_draft() == self.exam_snapshot):
+            return True
+        answer = QMessageBox.question(self, "Alterações na prova", "Deseja salvar as alterações da prova?",
+                                      QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel, QMessageBox.Save)
+        if answer == QMessageBox.Save:
+            return self.save_current_exam()
+        return answer == QMessageBox.Discard
+
+    def open_saved_exam(self):
+        exam_id = self.cb_saved_exams.currentData()
+        if exam_id is None or not self.confirm_save_exam():
+            return
+        try:
+            exam = saved_exams.load_exam(self.conn, exam_id)
+            self.open_exam_id = exam_id
+            self.lbl_open_exam.setText(f"Prova aberta: {exam['name']}")
+            self.selected_ids.clear()
+            self.selected_ids.update(exam['question_ids'])
+            self.exam_order.ids = list(exam['question_ids'])
+            settings = exam['settings']
+            self.chk_multiple_versions.setChecked(settings['multiple'])
+            self.spin_version_count.setValue(settings['count'])
+            self.chk_shuffle_questions.setChecked(settings['shuffle_questions'])
+            self.chk_shuffle_alternatives.setChecked(settings['shuffle_alternatives'])
+            self.chk_include_answers.setChecked(settings['include_answers'])
+            self.chk_separate_answers.setChecked(settings['separate_answers'])
+            self.cb_exam_class.setCurrentIndex(max(0, self.cb_exam_class.findData(exam['class_id'])))
+            self.exam_snapshot = self.exam_draft()
+            self.lbl_selected_count.setText(f"{len(self.selected_ids)} questão(ões) selecionada(s) para a prova")
+            self.btn_delete_selected_questions.setEnabled(bool(self.selected_ids))
+            self.btn_browse_selected_questions.setEnabled(bool(self.selected_ids))
+            self.refresh_exam_order()
+            self.load_questions(selected_only=self.search_view.selected_only)
+            if exam['changed_ids']:
+                self.show_alert("Questões alteradas", "Questões alteradas ou excluídas desde a prova salva: " +
+                                ", ".join(map(str, exam['changed_ids'])), QMessageBox.Warning)
+        except Exception as error:
+            self.show_alert("Erro", f"Não foi possível abrir a prova: {error}", QMessageBox.Warning)
+
+    def rename_saved_exam(self):
+        exam_id = self.cb_saved_exams.currentData()
+        if exam_id is None: return
+        name = self.get_text_prompt("Renomear prova", "Novo nome:")
+        if name:
+            try:
+                saved_exams.rename_exam(self.conn, exam_id, name)
+                if self.open_exam_id == exam_id:
+                    self.lbl_open_exam.setText(f"Prova aberta: {name}")
+                self.refresh_saved_exam_controls(exam_id)
+            except Exception as error:
+                self.show_alert("Erro", str(error), QMessageBox.Warning)
+
+    def duplicate_saved_exam(self):
+        exam_id = self.cb_saved_exams.currentData()
+        if exam_id is None: return
+        name = self.get_text_prompt("Duplicar prova", "Nome da nova prova:")
+        if name:
+            try:
+                new_id = saved_exams.duplicate_exam(self.conn, exam_id, name)
+                self.refresh_saved_exam_controls(new_id)
+            except Exception as error:
+                self.show_alert("Erro", f"Não foi possível duplicar a prova: {error}", QMessageBox.Warning)
+
+    def delete_saved_exam(self):
+        exam_id = self.cb_saved_exams.currentData()
+        if exam_id is None: return
+        name = saved_exams.load_exam(self.conn, exam_id)['name']
+        if self.show_confirm("Excluir prova", f"Excluir a prova '{name}' e seu histórico de uso? As questões serão mantidas."):
+            saved_exams.delete_exam(self.conn, exam_id)
+            if self.open_exam_id == exam_id:
+                self.open_exam_id = None
+                self.exam_snapshot = ((), None, self.exam_draft()[2])
+                self.lbl_open_exam.setText("Prova aberta: nenhuma")
+            self.refresh_saved_exam_controls()
+            self.load_questions(selected_only=self.search_view.selected_only)
+
+    def add_exam_class(self):
+        if not self.conn: return
+        name = self.get_text_prompt("Adicionar turma", "Nome da turma:")
+        if name:
+            try:
+                class_id = saved_exams.add_class(self.conn, name)
+                self.refresh_saved_exam_controls(self.open_exam_id)
+                self.cb_exam_class.setCurrentIndex(self.cb_exam_class.findData(class_id))
+            except Exception as error:
+                self.show_alert("Erro", f"Não foi possível adicionar a turma: {error}", QMessageBox.Warning)
+
+    def rename_exam_class(self):
+        class_id = self.cb_exam_class.currentData()
+        if class_id is None: return
+        name = self.get_text_prompt("Renomear turma", "Novo nome:")
+        if name:
+            try:
+                saved_exams.rename_class(self.conn, class_id, name)
+                self.refresh_saved_exam_controls(self.open_exam_id)
+                self.cb_exam_class.setCurrentIndex(self.cb_exam_class.findData(class_id))
+            except Exception as error:
+                self.show_alert("Erro", f"Não foi possível renomear a turma: {error}", QMessageBox.Warning)
+
+    def delete_exam_class(self):
+        class_id = self.cb_exam_class.currentData()
+        if class_id is None: return
+        name = self.cb_exam_class.currentText()
+        if self.show_confirm("Excluir turma", f"Excluir a turma '{name}'? As provas ficarão sem turma; o histórico será mantido."):
+            saved_exams.delete_class(self.conn, class_id)
+            self.refresh_saved_exam_controls(self.open_exam_id)
+
     def update_multi_version_controls(self, *_):
         enabled = self.chk_multiple_versions.isChecked()
         self.lbl_version_count.setEnabled(enabled)
@@ -2850,7 +3313,12 @@ class ExamGeneratorApp(QMainWindow):
     def refresh_exam_order(self):
         ids = self.exam_order.synchronize(self.selected_ids)
         try:
-            summaries = fetch_question_summaries(self.conn, ids) if self.conn and ids else {}
+            if self.conn and ids:
+                summaries = (fetch_normalized_question_summaries(self.conn, ids)
+                             if self.conn.execute('PRAGMA user_version').fetchone()[0] >= 4
+                             else fetch_question_summaries(self.conn, ids))
+            else:
+                summaries = {}
         except Exception as e:
             self.show_alert("Erro", f"Não foi possível carregar as questões selecionadas: {e}", QMessageBox.Warning)
             return
@@ -2877,18 +3345,33 @@ class ExamGeneratorApp(QMainWindow):
         if not self.selected_ids:
             self.show_alert("Aviso", "Nenhuma questão selecionada! Vá para a aba de busca e selecione questões primeiro.", QMessageBox.Warning)
             return
+        saved_exam_enabled = bool(self.conn and self.conn.execute('PRAGMA user_version').fetchone()[0] >= 6)
+        if saved_exam_enabled and (self.open_exam_id is None or self.exam_draft() != self.exam_snapshot):
+            if not self.save_current_exam():
+                return
         self.btn_generate.setEnabled(False)
         targets = []
         try:
             ordered_ids = self.exam_order.synchronize(self.selected_ids)
-            questions = fetch_ordered_questions(self.conn, ordered_ids)
+            normalized = self.conn.execute('PRAGMA user_version').fetchone()[0] >= 4
+            questions = (fetch_normalized_exam_questions(self.conn, ordered_ids) if normalized
+                         else fetch_ordered_questions(self.conn, ordered_ids))
             multiple = self.chk_multiple_versions.isChecked()
             count = self.spin_version_count.value() if multiple else 1
             placement = ('none' if not self.chk_include_answers.isChecked() else
                          'separate' if self.chk_separate_answers.isChecked() else 'end')
-            versions = generate_versions(questions, count,
-                multiple and self.chk_shuffle_questions.isChecked(),
-                multiple and self.chk_shuffle_alternatives.isChecked())
+            version_generator = generate_normalized_versions if normalized else generate_versions
+            arrangements = saved_exams.matching_versions(self.conn, self.open_exam_id) if saved_exam_enabled else []
+            if arrangements:
+                versions = restore_arrangements(questions, arrangements)
+                if len(versions) != count:
+                    raise ValueError("A quantidade de versões salvas não corresponde às opções da prova.")
+            else:
+                versions = version_generator(questions, count,
+                    multiple and self.chk_shuffle_questions.isChecked(),
+                    multiple and self.chk_shuffle_alternatives.isChecked())
+                if saved_exam_enabled:
+                    arrangements = capture_arrangements(questions, versions)
             issues = inspect_question_images(questions, include_answers=placement != 'none')
             acknowledged = set()
             if issues:
@@ -2923,11 +3406,21 @@ class ExamGeneratorApp(QMainWindow):
                     if answer is not None:
                         yield pair[1], answer
             written = publish_documents(documents(), confirmed=existing)
+            if saved_exam_enabled:
+                try:
+                    saved_exams.record_generation(self.conn, self.open_exam_id, arrangements, ordered_ids)
+                except Exception as error:
+                    self.show_alert("Erro ao registrar uso", "Os arquivos foram salvos, mas o uso não foi registrado: "
+                                    f"{error}\n\n" + "\n".join(map(str, written)), QMessageBox.Critical)
+                    return
+                self.load_questions(selected_only=self.search_view.selected_only)
             self.show_alert("Sucesso", "Arquivos salvos:\n" + "\n".join(map(str, written)), QMessageBox.Information)
         except PublicationError as e:
             message = f"Não foi possível concluir a geração: {e}"
             if e.published:
                 message += "\n\nArquivos salvos:\n" + "\n".join(map(str, e.published))
+                if saved_exam_enabled:
+                    message += "\n\nO uso não foi registrado porque a geração não foi concluída."
                 missing = [path for path in targets if path not in e.published]
                 if missing:
                     message += "\n\nArquivos não salvos:\n" + "\n".join(map(str, missing))

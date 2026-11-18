@@ -1,7 +1,7 @@
 # Feature specification: Schema normalization and real search
 
-**Folder**: `005-schema-normalization` | **Status**: Draft | **Created**: 2026-11-14
-**Fixes**: KD-12, KD-13, KD-14, KD-15 | **Plan**: to be written when this iteration starts
+**Folder**: `005-schema-normalization` | **Status**: Verified | **Created**: 2026-11-14
+**Fixes**: KD-12, KD-13, KD-14, KD-15 | **Plan**: [plan.md](plan.md)
 **Prerequisites**: 002 (versioned migrations, automatic backup), 003 (single write path for questions)
 
 ## Why
@@ -27,6 +27,9 @@ This is the only iteration that rewrites existing data. It is released as v2.0.
    orphan names are listed in an upgrade report.
 3. **Given** an upgraded bank, **when** it is opened with v1.x, **then** the old
    app refuses it or the user is warned in advance that it will not work.
+4. **Given** a question classified by a known segment without a school year,
+   **when** its bank is upgraded, **then** the segment remains visible without
+   inventing a year. Unmappable classification values appear in the upgrade report.
 
 ### US2 — Filtering by a category includes its subcategories (P1)
 
@@ -45,6 +48,10 @@ This is the only iteration that rewrites existing data. It is released as v2.0.
    keeps its questions and subcategories.
 3. **Given** two different parents, **when** I create a child named
    "Introdução" under each, **then** both are accepted.
+4. **Given** checked categories and an active edit or duplication, **when** a
+   category is created, renamed or moved, **then** checked IDs and unsaved form
+   content remain intact. Deleting categories removes only deleted IDs from the
+   checked and applied filters without selecting replacements.
 
 ### US4 — Text search finds what I typed (P1)
 
@@ -102,10 +109,17 @@ uses SQLite FTS5) belongs in the plan.
 
 ## Success criteria
 
-- Upgrade of the owner's real banks verified by comparing, per question, the
-  rendered card and the exported document before and after.
+- Upgrade of the owner's real banks verified by an automated comparison of
+  every original question's IDs, rich content, alternatives, answers, category
+  links and classification before and after migration, including generated
+  exam and answer-key content. Combine this with owner-led visual checks of a
+  varied sample of rendered cards and documents in Word. Explain intentional
+  test edits and every reported unmappable value; do not treat them as silent
+  migration changes.
 - KD-12 to KD-15 cannot be reproduced.
 - Search over 2,000 questions returns in under one second.
+
+Final verification results are recorded in [acceptance.md](acceptance.md).
 
 ## Out of scope
 
@@ -113,16 +127,14 @@ New question types; saved exams (spec 006); result paging and source-year range
 implementation (specs 007 and 008). If those land first, preserve their
 behavior while adapting their storage queries/tests to the normalized schema.
 
-## Open questions
+## Owner decisions (2026-11-18)
 
-- [NEEDS CLARIFICATION: Which segments and years should exist? Today only
-  Fundamental II (6º–9º) and Médio. Candidates: Fundamental I (1º–5º), Ensino
-  Superior, a free "Outro".]
-- [NEEDS CLARIFICATION: May one question belong to more than one segment (e.g.
-  9º Ano and 1ª Série)?]
-- [NEEDS CLARIFICATION: Should `source year` become a numeric stored value in
-  this migration, and how should existing free-text values map? Spec 008 now
-  proposes range filtering without changing storage; this numeric-storage
-  decision remains unresolved and is not required for those filters.]
-- [NEEDS CLARIFICATION: Is breaking compatibility with the v1.x executable
-  acceptable (US1 scenario 3)?]
+- Keep Fundamental II (6º–9º) and Médio (1ª–3ª Série) as the available years.
+- A question may belong to more than one segment.
+- Convert source years to numbers and preserve unmappable text separately.
+- Compatibility with v1.x executables may be broken; warn the user before upgrading.
+- On 2026-11-18, the owner chose to store segments independently of years, so a
+  segment can be preserved even when no school year is recorded.
+- On 2026-11-18, the owner approved exhaustive automated bank comparison plus
+  representative manual card and Word checks for final acceptance, replacing
+  a manual visual comparison of every question.

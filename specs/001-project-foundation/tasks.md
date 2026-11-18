@@ -10,7 +10,7 @@
 
 ## Phase 2 — Package without behavior change
 
-- [ ] T004 `git mv Prometheus1.1.py prometheus/app.py`; commit the move alone.
+- [x] T004 The package move is already present, but was not recorded as a standalone move commit. On 2026-11-18 the owner authorized closing this historical task without rewriting history.
 - [x] T005 Add `prometheus/__init__.py` with `__version__`; replace `APP_VERSION` usages.
 - [x] T006 Add `prometheus/__main__.py` holding the former `if __name__ == "__main__"` block; confirm `python -m prometheus` starts the app.
 - [x] T007 Decode the embedded QR image to `prometheus/assets/pix_qr.jpg`, add `prometheus/resources.py`, load the image from the file, delete the base64 block and the `base64` import.

@@ -85,8 +85,9 @@ class QuestionSession:
             return stored if value == shown else value
         return replace(current,
             statement=preserve(current.statement, self.initial_form.statement, self.original.statement),
-            alternatives=tuple(preserve(value, shown, stored) for value, shown, stored in
-                               zip(current.alternatives, self.initial_form.alternatives, self.original.alternatives)),
+            alternatives=tuple(preserve(value, self.initial_form.alternatives[index], self.original.alternatives[index])
+                               if index < len(self.initial_form.alternatives) and index < len(self.original.alternatives)
+                               else value for index, value in enumerate(current.alternatives)),
             essay_answer=preserve(current.essay_answer, self.initial_form.essay_answer, self.original.essay_answer))
 
     def unchanged_values(self, current):

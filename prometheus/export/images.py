@@ -82,19 +82,21 @@ def read_image(source):
 
 
 def inspect_question_images(questions, include_answers=True):
+    from prometheus.domain.exam_questions import as_exam_question
     issues = []
     for question in questions:
-        contents = [question[4]]
-        if question[3] == 'Múltipla Escolha':
-            contents.extend(question[5:10])
+        question = as_exam_question(question)
+        contents = [question.statement]
+        if question.kind == 'multiple_choice':
+            contents.extend(question.alternatives)
         elif include_answers:
-            contents.append(question[10])
+            contents.append(question.answer)
         for content in contents:
             for source in image_sources(content):
                 try:
                     read_image(source)
                 except ImageReadError as exc:
-                    issues.append(ImageIssue(question[0], source, str(exc)))
+                    issues.append(ImageIssue(question.id, source, str(exc)))
     return issues
 
 

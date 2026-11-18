@@ -27,8 +27,11 @@ def test_migration_can_roll_back_all_schema_changes():
     conn.close()
 
 
-def test_version_one_upgrade_backs_up_and_preserves_legacy_rows(tmp_path):
+def test_version_one_upgrade_backs_up_and_preserves_legacy_rows(tmp_path, monkeypatch):
+    from prometheus.storage import database
     from prometheus.storage.database import open_bank
+    monkeypatch.setattr(database, 'SCHEMA_VERSION', 3)
+    monkeypatch.setattr(database, 'MIGRATIONS', database.MIGRATIONS[:3])
     path = tmp_path / 'legacy.db'
     conn = sqlite3.connect(path)
     migrate_0_to_1(conn)
@@ -63,7 +66,10 @@ def test_version_one_upgrade_failure_rolls_back(tmp_path, monkeypatch):
     assert len(list((tmp_path / 'backups').rglob('*.db'))) == 1
 
 
-def test_version_two_upgrade_keeps_rows_and_backs_up(tmp_path):
+def test_version_two_upgrade_keeps_rows_and_backs_up(tmp_path, monkeypatch):
+    from prometheus.storage import database
+    monkeypatch.setattr(database, 'SCHEMA_VERSION', 3)
+    monkeypatch.setattr(database, 'MIGRATIONS', database.MIGRATIONS[:3])
     from prometheus.storage.migrations import migrate_1_to_2
     from prometheus.storage.database import open_bank
     path = tmp_path / 'legacy.db'
