@@ -1,6 +1,6 @@
 # Question cards and new-exam workflow: implementation handoff
 
-**Prepared**: 2026-11-18 | **Status**: 011 done, with owner-accepted unperformed checks; 012 planning only
+**Prepared**: 2026-11-18 | **Status**: 011 done, with owner-accepted unperformed checks; 012 done, with owner-confirmed visual acceptance
 
 ## Requests and confirmed decision
 
@@ -19,7 +19,7 @@ and search filters, returning to search. Unsaved changes use Save/Discard/Cancel
 saved exams are preserved. This is recorded in 012's reset table.
 
 The specs propose precise layouts, interaction details and failure handling to
-make those requests implementable. Spec 012 remains Draft; do not describe all design
+make those requests implementable. Spec 012 was implemented; do not describe all design
 details as separately owner-approved. No unresolved clarification marker was
 found in the inspected prerequisite specs. If a new ambiguity appears, ask the
 owner and record the answer; never resolve an existing marker yourself.
@@ -61,7 +61,7 @@ by these plans. Neither change requires a schema migration or new dependency.
 
 ## Scope of this documentation change
 
-The original documentation change created the specs and handoff. Spec 011 has since been implemented and tested; its [acceptance report](../specs/011-compact-question-cards/acceptance.md) records the owner-accepted unperformed native checks. Spec 012 has not been implemented.
+The original documentation change created the specs and handoff. Spec 011 has since been implemented and tested; its [acceptance report](../specs/011-compact-question-cards/acceptance.md) records the owner-accepted unperformed native checks. Spec 012 has been implemented; its [acceptance report](../specs/012-new-exam-workflow/acceptance.md) records the owner’s visual confirmation and the limits of the available platform details.
 
 ## Original implementation prompt (historical)
 

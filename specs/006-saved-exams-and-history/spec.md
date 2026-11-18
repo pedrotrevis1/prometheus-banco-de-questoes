@@ -55,7 +55,7 @@ questions with the same students.
 
 - **FR-001** An exam is a named, ordered set of questions with its turma and
   generation options, stored in the bank. Documents remain header-free.
-- **FR-002** The current selection can be saved as a new exam or over the open one.
+- **FR-002** The current selection can be saved as a new exam or over the open one. Spec 012 adds a guarded fresh-draft action that detaches the open exam and resets preparation state.
 - **FR-003** Generating documents from an exam records a usage: date, class,
   number of versions.
 - **FR-004** Question cards show the usages of the question. Spec 011 replaces the inline presentation with a count and on-demand history; usage records and filters are unchanged.

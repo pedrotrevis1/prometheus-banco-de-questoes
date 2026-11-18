@@ -26,7 +26,7 @@ coded, and the documents here are the source of truth for what the app should do
 
 Specs 001–010 have implementation plans and tasks; consult the roadmap for
 their current delivery/verification status. The owner accepted 010's preview
-fix. Spec 011 is done with owner-accepted unperformed checks; spec 012 remains Draft with a plan and ordered tasks.
+fix. Spec 011 is done with owner-accepted unperformed checks; spec 012 is done with owner-confirmed visual acceptance.
 Their addition records current limitations and proposes changes, without
 implementing application behavior. Revalidate paths/prerequisites before starting.
 

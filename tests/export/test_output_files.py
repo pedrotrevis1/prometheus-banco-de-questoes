@@ -32,3 +32,12 @@ def test_reports_partial_publication_and_preserves_unwritten_existing(tmp_path, 
     assert error.value.published == (first,)
     assert first.exists() and second.read_bytes() == b'previous'
     assert sorted(p.name for p in tmp_path.iterdir()) == ['one.docx', 'two.docx']
+
+
+def test_suggested_exam_filename_is_safe_and_preserves_names():
+    from prometheus.export.files import suggested_exam_filename
+    assert suggested_exam_filename('Prova de Biologia') == 'Prova de Biologia.docx'
+    assert suggested_exam_filename('  3ª Série: Biologia / A  ') == '3ª Série_ Biologia _ A.docx'
+    assert suggested_exam_filename('Prova.docx') == 'Prova.docx'
+    assert suggested_exam_filename('CON') == '_CON.docx'
+    assert suggested_exam_filename('...') == 'Prova.docx'

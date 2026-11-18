@@ -1,6 +1,6 @@
 # Feature specification: Start a new exam
 
-**Folder**: `012-new-exam-workflow` | **Status**: Draft | **Created**: 2026-11-18
+**Folder**: `012-new-exam-workflow` | **Status**: Done; owner confirmed the visual test and authorized T009 closure | **Created**: 2026-11-18
 **Prerequisites**: 006 saved exams; 007/008 search state; execute after 011
 **Plan**: [plan.md](plan.md) | **Tasks**: [tasks.md](tasks.md)
 **Handoff**: [card-and-new-exam-workflow.md](../../docs/card-and-new-exam-workflow.md)
@@ -104,7 +104,9 @@ Preview heights follow their existing non-persistent lifetime when cards reload.
 - **FR-001** Expose a visible "Nova prova" action in the third tab, separate
   from "Duplicar" and "Salvar como". Keep saved-exam actions reachable without
   extending an already crowded single row: use a separate draft action row
-  and, where needed, two rows for existing saved-exam controls.
+  and, where needed, two rows for existing saved-exam controls. Place the new
+  draft action and saved-exam controls inside a titled "Gerenciar provas" panel,
+  matching the existing exam-options panel in both themes, as requested by the owner.
 - **FR-002** Run the unsaved-work guard before mutating any draft, search or UI
   state. Preserve existing close/bank-switch/open guards. A successful Save may
   write through existing persistence; the reset itself is in-memory/read-only.
@@ -123,6 +125,9 @@ Preview heights follow their existing non-persistent lifetime when cards reload.
   A successful save before that error remains saved.
 - **FR-007** No migration, new dependency, automatic empty-draft save, usage
   entry, document generation or new database creation on "Nova prova".
+- **FR-008** When generating a saved exam, suggest its current saved name as
+  the editable Word filename in the save dialog, with unsafe filename characters
+  replaced for Windows and macOS. The legacy path retains its existing default.
 
 ## Success criteria and scope
 
@@ -134,5 +139,4 @@ and reopen both saved exams. Record core/UI tests and visible native checks in
 
 Out of scope: multiple simultaneously open drafts, autosave/recovery, templates,
 changing existing save/duplicate/delete semantics, rewriting export logic and
-resetting question registration. This is a planning proposal; only the stated
-reset preference has been explicitly confirmed by the owner so far.
+resetting question registration. Implementation and automated verification are complete; the owner confirmed the visual test and authorized T009 closure. See [acceptance.md](acceptance.md) for the evidence and limits.
