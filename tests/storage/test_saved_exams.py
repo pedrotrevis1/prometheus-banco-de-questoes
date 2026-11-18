@@ -170,3 +170,16 @@ def test_intentional_question_reordering_does_not_delete_prior_arrangements(conn
     assert saved_exams.matching_versions(conn, exam_id) == []
     saved_exams.save_exam(conn, 'Prova', None, {}, [1, 2], exam_id)
     assert saved_exams.matching_versions(conn, exam_id) == original
+
+
+def test_page_usage_counts_match_details_and_count_generations(conn):
+    exam_id = saved_exams.save_exam(conn, 'Prova', None, {}, [1])
+    assert saved_exams.question_usage_counts(conn, [1, 2]) == {1: 0, 2: 0}
+    saved_exams.record_generation(conn, exam_id, [[], [], []], [1], used_at='2026-01-01')
+    saved_exams.record_generation(conn, exam_id, [[]], [1], used_at='2026-01-01')
+    saved_exams.duplicate_exam(conn, exam_id, 'Cópia')
+    counts = saved_exams.question_usage_counts(conn, [1, 2])
+    assert counts == {1: 2, 2: 0}
+    assert counts[1] == len(saved_exams.question_usages(conn, 1))
+    assert saved_exams.question_usage_counts(conn, []) == {}
+    assert saved_exams.question_usage_counts(conn, [2]) == {2: 0}

@@ -304,8 +304,8 @@ def test_question_card_displays_modified_time_or_unknown(window):
     window.conn.commit(); window.load_questions()
     first = window.scroll_layout.itemAt(0).widget()
     second = window.scroll_layout.itemAt(1).widget()
-    assert any('Última alteração:' in label.text() and 'Última alteração: Não informada' not in label.text() for label in first.findChildren(QLabel))
-    assert any('Última alteração: Não informada' in label.text() for label in second.findChildren(QLabel))
+    assert 'Não informada' not in first.findChild(QLabel, 'CardModified').text()
+    assert 'Não informada' in second.findChild(QLabel, 'CardModified').text()
 
 
 def test_unchanged_edit_preserves_exported_text_and_embedded_image(window, tmp_path, monkeypatch):

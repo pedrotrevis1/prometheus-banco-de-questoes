@@ -12,6 +12,7 @@ coded, and the documents here are the source of truth for what the app should do
 | [architecture.md](architecture.md) | Current structure, target structure, key decisions |
 | [glossary.md](glossary.md) | Domain terms, Portuguese ↔ English |
 | [search-tab-fixes.md](search-tab-fixes.md) | Owner-requested tab-2 fixes, decisions, source evidence and instructions for future implementation chats |
+| [card-and-new-exam-workflow.md](card-and-new-exam-workflow.md) | Specs 011–012 handoff: compact cards, count/hover history and the owner-confirmed fresh-exam reset |
 | [../specs/000-baseline/](../specs/000-baseline/spec.md) | What the released app does today, including known defects |
 | `../specs/NNN-name/` | One folder per feature: `spec.md`, then `plan.md` and `tasks.md` |
 
@@ -23,12 +24,11 @@ coded, and the documents here are the source of truth for what the app should do
   constitution check. Written when the feature is about to be built.
 - **tasks.md** — ordered, checkable steps derived from the plan.
 
-Specs 001–009 have implementation plans and tasks; consult the roadmap for
-their current delivery and verification status. Spec 010 has a Draft spec,
-plan, ordered tasks and recorded visual evidence at the owner's request for
-another agent to fix a remaining preview-resize defect. Its addition documents
-the existing failure and does not implement a behavior change. Revalidate paths
-and prerequisites before beginning implementation.
+Specs 001–010 have implementation plans and tasks; consult the roadmap for
+their current delivery/verification status. The owner accepted 010's preview
+fix. Spec 011 is done with owner-accepted unperformed checks; spec 012 remains Draft with a plan and ordered tasks.
+Their addition records current limitations and proposes changes, without
+implementing application behavior. Revalidate paths/prerequisites before starting.
 
 ## Conventions
 

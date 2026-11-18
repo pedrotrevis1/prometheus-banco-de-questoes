@@ -259,3 +259,37 @@ def test_visible_preview_growth_and_shrink_reflow(preview_window, expanded):
     assert shrunk[5] + handle.height() <= shrunk[2]
     assert shrunk[6] == before[6]
     assert first.view_panel.toHtml() == text
+
+
+@pytest.mark.parametrize('width', [300, 640])
+def test_preview_reflow_with_both_card_header_modes(qt_app, width):
+    from PySide6.QtWidgets import QWidget, QVBoxLayout, QScrollArea, QBoxLayout
+    from prometheus.app import QuestionCard
+    scroll = QScrollArea()
+    content = QWidget()
+    layout = QVBoxLayout(content)
+    scroll.setWidget(content)
+    scroll.setWidgetResizable(True)
+    scroll.resize(width, 900)
+    cards = [QuestionCard(i, 'Biologia', 'Médio', 'Médio', 'Dissertativa',
+                          '<p>' + 'conteúdo ' * 300 + '</p>', False, lambda *a: None,
+                          result_viewport=scroll.viewport(), usage_count=2)
+             for i in (1, 2)]
+    for card in cards:
+        layout.addWidget(card)
+    layout.addStretch()
+    scroll.show()
+    for _ in range(10): qt_app.processEvents()
+    first, second = cards
+    assert (first.header_layout.direction() == QBoxLayout.TopToBottom) == (width == 300)
+    before = first.height(), second.pos().y(), first.view_panel.height()
+    handle = first.resize_handle
+    origin = handle.mapToGlobal(handle.rect().center())
+    send_mouse(handle, QEvent.MouseButtonPress, origin, 0, Qt.LeftButton, Qt.LeftButton)
+    send_mouse(handle, QEvent.MouseMove, origin, 40, Qt.NoButton, Qt.LeftButton)
+    send_mouse(handle, QEvent.MouseButtonRelease, origin, 40, Qt.LeftButton, Qt.NoButton)
+    for _ in range(5): qt_app.processEvents()
+    assert first.view_panel.height() == before[2] + 40
+    assert first.height() == before[0] + 40
+    assert second.pos().y() == before[1] + 40
+    scroll.close()

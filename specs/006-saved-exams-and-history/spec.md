@@ -58,7 +58,7 @@ questions with the same students.
 - **FR-002** The current selection can be saved as a new exam or over the open one.
 - **FR-003** Generating documents from an exam records a usage: date, class,
   number of versions.
-- **FR-004** Question cards show the usages of the question.
+- **FR-004** Question cards show the usages of the question. Spec 011 replaces the inline presentation with a count and on-demand history; usage records and filters are unchanged.
 - **FR-005** Search can filter by never used and by not used since a date.
 - **FR-006** Exams can be listed, opened, renamed, duplicated and deleted.
 - **FR-007** Regenerating an exam preserves the saved question and alternative orders when compatible. It uses current question content and the current correct answer. If an arrangement is incompatible, the teacher is warned and regeneration is blocked.

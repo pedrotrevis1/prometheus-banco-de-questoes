@@ -1,6 +1,7 @@
+from prometheus.domain.card_data import card_metadata, actions_below_metadata, wrap_long_tokens
 from prometheus.domain.exam_order import ExamOrder
 from prometheus.domain.exam_arrangements import capture_arrangements, restore_arrangements
-from prometheus.domain.usage_history import format_usage_history
+from prometheus.domain.usage_history import usage_count_label, usage_entries
 from prometheus.storage import saved_exams
 from prometheus.domain.card_data import legacy_card_data
 from prometheus.domain.category_tree_state import snapshot_checked, restore_checked
@@ -16,7 +17,7 @@ from prometheus.export.files import output_paths, publish_documents, Publication
 from prometheus.export.images import inspect_question_images
 from prometheus.export.images import embed_html_images, clipboard_image_data, ImageReadError
 from prometheus.domain.questions import (RichContent, QuestionDraft, QuestionValidationError,
-    QuestionSession, format_last_modified, split_available_categories, stored_school_years, validate_question)
+    QuestionSession, split_available_categories, stored_school_years, validate_question)
 from prometheus.storage.questions import get_question, insert_question, update_question
 from prometheus.storage.normalized_questions import delete_questions as delete_normalized_questions
 from prometheus.storage.normalized_questions import get_question as get_normalized_question, save_question as save_normalized_question
@@ -39,6 +40,7 @@ from prometheus.domain.school_years import parse_question_year_values, format_qu
 from prometheus.domain.richtext import html_fragment, format_equation_html
 
 import sys
+from html import escape
 from dataclasses import replace
 from datetime import datetime
 import os
@@ -52,7 +54,7 @@ from PySide6.QtWidgets import (
     QFrame, QButtonGroup, QSizePolicy, QStyledItemDelegate, QListView,
     QTreeWidget, QTreeWidgetItem, QListWidget, QDialog, QFormLayout, QToolButton, QInputDialog,
     QRadioButton, QGridLayout, QProxyStyle, QStyle, QHeaderView, QStyleFactory, QSpinBox, QDateEdit,
-    QStyleOptionComboBox, QStyleOptionSpinBox
+    QStyleOptionComboBox, QStyleOptionSpinBox, QBoxLayout
 )
 from PySide6.QtCore import Qt, QByteArray, QBuffer, QIODevice, QPoint, QPointF, QRectF, QSize, QTimer, QEvent, QMimeData, QDate
 from PySide6.QtGui import QFont, QPalette, QIcon, QIconEngine, QTextImageFormat, QImage, QPixmap, QTextCharFormat, QTextCursor, QPainter, QPen, QPolygon, QPainterPath, QColor
@@ -61,6 +63,14 @@ APP_NAME = "Prometheus - Banco de Questões"
 from prometheus import __version__
 IS_WINDOWS = platform.system() == "Windows"
 
+
+CARD_STYLE = """
+#CardMetadata { background: #DCFCE7; border-radius: 6px; }
+#CardIdentifier { font-weight: bold; font-size: 15px; color: #183D2B; }
+#CardYears, #CardKind, #CardSubject, #CardSource, #CardModified { font-weight: normal; background: transparent; color: #183D2B; }
+QPushButton#CardAction { padding: 4px 8px; }
+QPushButton#CardUsage { padding: 2px 4px; font-weight: normal; text-align: left; }
+"""
 
 def interface_font():
     """Point sizes let Qt handle the monitor's DPI without conflicting pixel sizes."""
@@ -603,12 +613,165 @@ class InsertEquationDialog(QDialog):
         return self.cb_type.currentText()
 
 
+class UsagePopup(QWidget):
+    """Qt adapter for an on-demand, screen-bounded history."""
+    def __init__(self, control, count, request):
+        super().__init__(control, Qt.Tool | Qt.FramelessWindowHint)
+        self.setObjectName("UsagePopup")
+        self.control, self.count, self.request = control, count, request
+        self.activated = False
+        self.setFocusPolicy(Qt.StrongFocus)
+        self.set_theme(False)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFocusPolicy(Qt.StrongFocus)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.content = QWidget()
+        self.content.setObjectName("UsageContent")
+        self.entries = QVBoxLayout(self.content)
+        self.entries.setContentsMargins(2, 2, 2, 2)
+        self.entries.setSpacing(6)
+        self.scroll.setWidget(self.content)
+        layout.addWidget(self.scroll)
+        control.installEventFilter(self)
+        self.installEventFilter(self)
+        self.close_timer = QTimer(self)
+        self.close_timer.setSingleShot(True)
+        self.close_timer.setInterval(250)
+        self.close_timer.timeout.connect(self._close_if_left)
+        control.clicked.connect(self.activate)
+
+    def set_theme(self, dark):
+        surface = "#252538" if dark else "#FFFFFF"
+        foreground = "#E2E8F0" if dark else "#334155"
+        border = "#45475A" if dark else "#CBD5E1"
+        self.setStyleSheet(f"""
+            #UsagePopup, #UsageContent, #UsagePopup QScrollArea, #UsagePopup QScrollArea QWidget {{
+                background-color: {surface}; color: {foreground};
+            }}
+            #UsagePopup {{ border: 1px solid {border}; border-radius: 6px; }}
+            #UsageEntry {{ background: transparent; color: {foreground}; }}
+            #UsagePopup QScrollBar:vertical {{ background: {surface}; width: 10px; }}
+            #UsagePopup QScrollBar::handle:vertical {{ background: {border}; min-height: 20px; border-radius: 5px; }}
+        """)
+
+    def _populate(self):
+        while self.entries.count():
+            item = self.entries.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.setParent(None)
+                widget.deleteLater()
+        if self.count is None:
+            entries = ["Histórico de usos não disponível."]
+        elif self.count == 0:
+            entries = ["Nenhum uso registrado."]
+        else:
+            try:
+                entries = usage_entries(self.request()) or ["Nenhum uso registrado."]
+            except Exception:
+                entries = ["Não foi possível carregar o histórico de usos."]
+        for entry in entries:
+            label = QLabel(wrap_long_tokens(entry))
+            label.setObjectName("UsageEntry")
+            label.setTextFormat(Qt.PlainText)
+            label.setWordWrap(True)
+            label.setMinimumWidth(0)
+            self.entries.addWidget(label)
+        self.entries.addStretch()
+
+    def show_history(self, activated=False):
+        self.close_timer.stop()
+        if self.isVisible():
+            if activated:
+                self.activated = True
+                self.scroll.setFocus(Qt.OtherFocusReason)
+            return
+        self.activated = activated
+        self._populate()
+        screen = QApplication.screenAt(self.control.mapToGlobal(self.control.rect().center())) or QApplication.primaryScreen()
+        available = screen.availableGeometry()
+        width = min(380, available.width())
+        height = min(300, available.height(), max(80, self.content.sizeHint().height() + 24))
+        self.resize(width, height)
+        origin = self.control.mapToGlobal(QPoint(0, self.control.height()))
+        x = max(available.left(), min(origin.x(), available.right() - width + 1))
+        y = origin.y()
+        if y + height > available.bottom() + 1:
+            y = self.control.mapToGlobal(QPoint(0, 0)).y() - height
+        y = max(available.top(), min(y, available.bottom() - height + 1))
+        self.move(x, y)
+        QApplication.instance().installEventFilter(self)
+        self.show()
+        if activated:
+            self.scroll.setFocus(Qt.OtherFocusReason)
+
+    def activate(self):
+        self.show_history(True)
+
+    def _close_if_left(self):
+        if not self.activated and not self.underMouse() and not self.control.underMouse():
+            self.close_history()
+
+    def close_history(self):
+        was_active = self.activated
+        self.activated = False
+        self.close_timer.stop()
+        QApplication.instance().removeEventFilter(self)
+        self.hide()
+        if was_active and self.control.isVisible():
+            self.control.setFocus(Qt.OtherFocusReason)
+
+    def eventFilter(self, watched, event):
+        kind = event.type()
+        if watched is self.control:
+            if kind == QEvent.KeyPress and event.key() in (Qt.Key_Return, Qt.Key_Enter):
+                self.activate()
+                return True
+            if kind == QEvent.Enter:
+                self.show_history()
+            elif kind == QEvent.Leave and not self.activated:
+                self.close_timer.start()
+        elif watched is self:
+            if kind == QEvent.Enter:
+                self.close_timer.stop()
+            elif kind == QEvent.Leave and not self.activated:
+                self.close_timer.start()
+        if self.isVisible() and self.activated and kind == QEvent.KeyPress:
+            bar = self.scroll.verticalScrollBar()
+            key = event.key()
+            if key == Qt.Key_Home:
+                bar.setValue(bar.minimum())
+                return True
+            if key == Qt.Key_End:
+                bar.setValue(bar.maximum())
+                return True
+            steps = {Qt.Key_Up: -bar.singleStep(), Qt.Key_Down: bar.singleStep(),
+                     Qt.Key_PageUp: -bar.pageStep(), Qt.Key_PageDown: bar.pageStep()}
+            if key in steps:
+                bar.setValue(bar.value() + steps[key])
+                return True
+        if self.isVisible() and kind == QEvent.KeyPress and event.key() == Qt.Key_Escape:
+            self.close_history()
+            return True
+        if self.isVisible() and self.activated and kind == QEvent.MouseButtonPress:
+            if isinstance(watched, QWidget) and watched is not self.control and watched is not self and not self.isAncestorOf(watched):
+                self.close_history()
+        return super().eventFilter(watched, event)
+
+
 class QuestionCard(QFrame):
     def __init__(self, q_id, subject, difficulty, ano, q_type, html_content, is_selected, toggle_callback,
                  question_source="", source_year="", result_viewport=None,
-                 edit_callback=None, duplicate_callback=None, last_modified=None, usage_text=""):
+                 edit_callback=None, duplicate_callback=None, last_modified=None,
+                 usage_count=None, history_request=None):
         super().__init__()
+        self.setStyleSheet(CARD_STYLE)
         self.q_id = q_id
+        self.usage_count = usage_count
+        self.history_request = history_request
         self._result_viewport = result_viewport
         self._preview_sizing = PreviewSizing()
         self._fitting_preview = False
@@ -620,41 +783,64 @@ class QuestionCard(QFrame):
         self.layout.setContentsMargins(15, 15, 15, 15)
         self.layout.setSpacing(8)
 
-        header_layout = QHBoxLayout()
-        display_subject = (subject or "").replace(";", ", ").strip(", ")
-        display_source = (question_source or "").strip() or "Não informada"
-        display_source_year = (source_year or "").strip() or "Não informado"
-        modified_label = format_last_modified(last_modified) or "Não informada"
-        header_label = QLabel(
-            f"ID: {q_id} | Segmento/Ano: {ano} | {difficulty} | {q_type}\n"
-            f"Assunto: {display_subject}\n"
-            f"Fonte da Questão: {display_source} | Ano: {display_source_year}\n"
-            f"Última alteração: {modified_label}" + (f"\nUsos: {usage_text}" if usage_text else "")
-        )
-        header_label.setTextFormat(Qt.PlainText)
-        header_label.setObjectName("CardLabel")
-        header_label.setWordWrap(True)
-        
+        self.header_layout = QBoxLayout(QBoxLayout.LeftToRight)
+        self.header_layout.setSpacing(8)
+        metadata = card_metadata(q_id, subject, difficulty, ano, q_type, question_source, source_year, last_modified)
+        self.metadata_widget = QWidget()
+        self.metadata_widget.setObjectName("CardMetadata")
+        self.metadata_widget.setMinimumWidth(0)
+        metadata_layout = QVBoxLayout(self.metadata_widget)
+        metadata_layout.setContentsMargins(8, 3, 8, 3)
+        metadata_layout.setSpacing(2)
+        identifier = QLabel(f"Questão #{metadata['id']}")
+        identifier.setObjectName("CardIdentifier")
+        identifier.setTextFormat(Qt.PlainText)
+        metadata_layout.addWidget(identifier)
+        for name, fields in (
+            ("CardYears", (("Segmento / Série", metadata['years']),)),
+            ("CardKind", (("Dificuldade", metadata['difficulty']), ("Tipo", metadata['kind']))),
+            ("CardSubject", (("Assuntos", metadata['subject']),)),
+            ("CardSource", (("Fonte", metadata['source']), ("Ano da fonte", metadata['source_year']))),
+            ("CardModified", (("Última alteração", metadata['modified']),)),
+        ):
+            label = QLabel(" &nbsp; ".join(f"<b>{escape(str(key))}:</b> {escape(wrap_long_tokens(value))}" for key, value in fields))
+            label.setObjectName(name)
+            label.setTextFormat(Qt.RichText)
+            label.setWordWrap(True)
+            label.setMinimumWidth(0)
+            metadata_layout.addWidget(label)
+        self.usage_control = QPushButton(usage_count_label(usage_count))
+        self.usage_control.setObjectName("CardUsage")
+        self.usage_control.setAccessibleName(usage_count_label(usage_count))
+        self.usage_control.setAccessibleDescription("Mostrar histórico de usos")
+        metadata_layout.addWidget(self.usage_control, alignment=Qt.AlignLeft)
+        self.usage_popup = UsagePopup(self.usage_control, usage_count, history_request)
+        self.actions_widget = QWidget()
+        self.action_layout = QVBoxLayout(self.actions_widget)
+        self.action_layout.setContentsMargins(0, 0, 0, 0)
+        self.action_layout.setSpacing(3)
+        self.checkbox = QCheckBox("Selecionar")
+        self.checkbox.setChecked(is_selected)
+        self.checkbox.stateChanged.connect(lambda state: toggle_callback(self.q_id, state))
+        self.action_layout.addWidget(self.checkbox)
         self.btn_toggle = QPushButton("Ler enunciado" if IS_WINDOWS else "▼ Ler enunciado")
         set_ui_icon(self.btn_toggle, "down")
         self.btn_toggle.setCheckable(True)
         self.btn_toggle.setVisible(False)
         self.btn_toggle.clicked.connect(self.toggle_expansion)
-        
-        self.checkbox = QCheckBox("Selecionar")
-        self.checkbox.setChecked(is_selected)
-        self.checkbox.stateChanged.connect(lambda state: toggle_callback(self.q_id, state))
-        
-        header_layout.addWidget(header_label, stretch=1)
-        header_layout.addWidget(self.btn_toggle)
+        self.action_layout.addWidget(self.btn_toggle)
         self.btn_edit = QPushButton("Editar")
         self.btn_edit.clicked.connect(lambda: edit_callback(q_id) if edit_callback else None)
-        header_layout.addWidget(self.btn_edit)
+        self.action_layout.addWidget(self.btn_edit)
         self.btn_duplicate = QPushButton("Duplicar")
         self.btn_duplicate.clicked.connect(lambda: duplicate_callback(q_id) if duplicate_callback else None)
-        header_layout.addWidget(self.btn_duplicate)
-        header_layout.addWidget(self.checkbox)
-        self.layout.addLayout(header_layout)
+        self.action_layout.addWidget(self.btn_duplicate)
+        for button in (self.btn_toggle, self.btn_edit, self.btn_duplicate):
+            button.setObjectName("CardAction")
+        self.action_layout.addStretch()
+        self.header_layout.addWidget(self.metadata_widget, 1)
+        self.header_layout.addWidget(self.actions_widget, 0, Qt.AlignTop)
+        self.layout.addLayout(self.header_layout)
 
         self.view_panel = QTextEdit()
         self.view_panel.setObjectName("QuestionPreview")
@@ -684,13 +870,32 @@ class QuestionCard(QFrame):
         self.resize_handle = VerticalResizeHandle(self.view_panel)
         self.layout.addWidget(self.resize_handle, alignment=Qt.AlignRight)
 
+    def set_theme(self, dark):
+        style = CARD_STYLE
+        if dark:
+            style = style.replace('#DCFCE7', '#294338').replace('#183D2B', '#E2E8F0')
+        self.setStyleSheet(style)
+        self.usage_popup.set_theme(dark)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        margins = self.layout.contentsMargins()
+        width = max(0, event.size().width() - margins.left() - margins.right())
+        below = actions_below_metadata(width, 260, self.actions_widget.sizeHint().width(), self.header_layout.spacing())
+        direction = QBoxLayout.TopToBottom if below else QBoxLayout.LeftToRight
+        if self.header_layout.direction() != direction:
+            self.header_layout.setDirection(direction)
+            self.header_layout.setAlignment(self.actions_widget, (Qt.AlignLeft | Qt.AlignTop) if below else Qt.AlignTop)
+            QTimer.singleShot(0, self, self._fit_initial_preview)
+
     def _preview_geometry(self):
         viewport = self._result_viewport
         viewport_height = viewport.height() if viewport is not None else self.window().height()
         if viewport_height <= 0:
             viewport_height = 600
         margins = self.layout.contentsMargins()
-        header = self.layout.itemAt(0).sizeHint().height()
+        header_item = self.layout.itemAt(0)
+        header = header_item.geometry().height() or header_item.sizeHint().height()
         chrome = margins.top() + margins.bottom() + header + self.resize_handle.height() + 2 * self.layout.spacing()
         return viewport_height, chrome
 
@@ -973,6 +1178,7 @@ class ResizableTreeWidget(VerticalResizeMixin, QTreeWidget):
 def dispose_question_card(widget):
     """Disconnect preview callbacks before Qt deletes a result card."""
     if isinstance(widget, QuestionCard):
+        widget.usage_popup.close_history()
         widget.view_panel.document().documentLayout().documentSizeChanged.disconnect(widget._fit_initial_preview)
     widget.deleteLater()
 
@@ -1037,6 +1243,8 @@ class ExamGeneratorApp(QMainWindow):
                 palette.setColor(QPalette.Disabled, role, QColor("#A6ADC8" if dark else "#64748B"))
             QApplication.instance().setPalette(palette)
         self.setStyleSheet(DARK_THEME if self.is_dark_mode else LIGHT_THEME)
+        for card in self.findChildren(QuestionCard):
+            card.set_theme(self.is_dark_mode)
         # Refresh icon caches after a palette change (including existing cards).
         if IS_WINDOWS:
             for button in self.findChildren(QPushButton) + self.findChildren(QToolButton):
@@ -2815,6 +3023,10 @@ class ExamGeneratorApp(QMainWindow):
                     self.selected_ids if selected_only else None)
                 results = [legacy_card_data(row) for row in results]
 
+            history_available = normalized and self.conn.execute('PRAGMA user_version').fetchone()[0] >= 6
+            usage_counts = saved_exams.question_usage_counts(self.conn, [row.question_id for row in results]) if history_available else {}
+            history_conn = self.conn
+
             for row in results:
                 q_id, sub, dif = row.question_id, row.categories, row.difficulty
                 ano, segment, q_type, html_prompt = row.years, row.segment, row.kind, row.statement
@@ -2858,9 +3070,10 @@ class ExamGeneratorApp(QMainWindow):
                     edit_callback=lambda question_id: self.open_question_for_edit(question_id, False),
                     duplicate_callback=lambda question_id: self.open_question_for_edit(question_id, True),
                     last_modified=row.last_modified,
-                    usage_text=format_usage_history(saved_exams.question_usages(self.conn, q_id))
-                    if normalized and self.conn.execute('PRAGMA user_version').fetchone()[0] >= 6 else ''
+                    usage_count=usage_counts.get(q_id),
+                    history_request=(lambda question_id=q_id: saved_exams.question_usages(history_conn, question_id)) if history_available else None
                 )
+                card.set_theme(self.is_dark_mode)
                 card.checkbox.setStyle(self._selection_style)
                 cards.append(card)
 
