@@ -1,8 +1,18 @@
 # Feature specification: Stable question-preview resizing
 
-**Folder**: `009-preview-resize` | **Status**: In progress | **Created**: 2026-11-16
+**Folder**: `009-preview-resize` | **Status**: Done (historical implementation; follow-up completed in 010) | **Created**: 2026-11-16
 **Fixes**: KD-19 | **Prerequisite**: 008 (planned execution sequence)
 **Plan**: [plan.md](plan.md) | **Tasks**: [tasks.md](tasks.md)
+
+## Follow-up report (2026-11-18)
+
+The owner supplied a recording showing that the preview changes internally
+but remains clipped by its card, without corresponding visible reflow of the
+next card. The previous completion/sign-off alone did not establish that this symptom
+was fixed; 010 subsequently resolved it and the owner confirmed all scenarios
+checked. See [010](../010-preview-visible-resize/spec.md) and its
+[recorded evidence](../010-preview-visible-resize/reproduction.md).
+The original requirements and completed tasks remain as historical context.
 
 ## Why
 

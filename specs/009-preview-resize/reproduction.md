@@ -1,5 +1,11 @@
 # Resize reproduction
 
+This is the historical 009 reproduction. The owner supplied a new recording
+on 2026-11-18 showing clipped preview growth without corresponding visible
+card reflow. That remaining symptom is tracked separately in
+[010 reproduction](../010-preview-visible-resize/reproduction.md); the earlier
+measurements below do not demonstrate its resolution.
+
 On the owner's clarification, only the question card or page content grows;
 the issue occurs in collapsed or expanded state. Reproduced 2026-11-17 with
 Python 3.14.5 and PySide6/Qt 6.11.1, macOS arm64, offscreen Qt, light theme,

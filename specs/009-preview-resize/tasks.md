@@ -1,6 +1,11 @@
 # Tasks: Stable question-preview resizing
 
-**Plan**: [plan.md](plan.md) | **Status**: In progress
+**Plan**: [plan.md](plan.md) | **Status**: Done historically; follow-up completed in 010
+
+The owner reported a remaining visible-resize/clipping failure on 2026-11-18.
+These checked tasks record the earlier implementation and sign-off; they do
+did not close the new report. [010](../010-preview-visible-resize/tasks.md)
+has since been completed and accepted.
 
 Do tasks in order, one at a time; mark only after validation. The owner confirmed the growth affects the card/page content in either preview state; synthetic reproduction is recorded separately.
 

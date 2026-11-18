@@ -1,6 +1,6 @@
 # Implementation plan: Stable question-preview resizing
 
-**Spec**: [spec.md](spec.md) | **Status**: In progress | **Created**: 2026-11-16
+**Spec**: [spec.md](spec.md) | **Status**: Done historically; visible-resize follow-up in [010](../010-preview-visible-resize/plan.md) | **Created**: 2026-11-16
 
 ## Investigation before a fix
 

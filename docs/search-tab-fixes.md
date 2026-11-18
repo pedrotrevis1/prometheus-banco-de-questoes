@@ -1,6 +1,22 @@
 # Search tab fixes: handoff for implementation agents
 
-**Prepared**: 2026-11-16 | **Status**: 007–009 implemented; platform checks complete per owner on 2026-11-17
+**Prepared**: 2026-11-16 | **Updated**: 2026-11-18 | **Status**: 007–010 complete; owner confirmed all 010 scenarios checked
+
+## Remaining preview defect — next handoff (2026-11-18)
+
+The owner's new recording shows the preview changing internally while its
+visible content is clipped and the next card stays approximately stationary.
+The previous platform sign-off does not close this report. Continue with
+[010 spec](../specs/010-preview-visible-resize/spec.md),
+[reproduction and frames](../specs/010-preview-visible-resize/reproduction.md),
+[plan](../specs/010-preview-visible-resize/plan.md) and
+[ordered tasks](../specs/010-preview-visible-resize/tasks.md). Current source
+reproduced the defect and a layout fix passes the synthetic regression. The
+owner confirmed all scenarios checked and accepted the fix. Use isolated
+synthetic fixtures, never the owner's personal bank.
+
+The sections below preserve the original 007–009 handoff and historical checks;
+010 has since been completed and accepted by the owner.
 
 Start here when continuing the owner's three reported problems in "Buscar e
 Selecionar Questões". Read `AGENTS.md`, [constitution.md](constitution.md),

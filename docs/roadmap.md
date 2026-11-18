@@ -8,6 +8,9 @@ Spec 005 passed owner-led manual checks and an
 exhaustive automated comparison of the supplied biology bank; see its
 [acceptance report](../specs/005-schema-normalization/acceptance.md).
 New planning documents do not mean that prerequisites have been implemented.
+The owner reported a remaining preview-resize defect on 2026-11-18, supported
+by a screen recording. Spec 010 fixes the reported defect; the owner confirmed all scenarios checked
+and accepted the implementation.
 
 | # | Spec | Goal | Depends on | Status |
 |---|---|---|---|---|
@@ -20,13 +23,16 @@ New planning documents do not mean that prerequisites have been implemented.
 | 006 | [saved-exams-and-history](../specs/006-saved-exams-and-history/spec.md) | Save exams, see where each question was used | 005 | Implemented; platform checks pending |
 | 007 | [search-pagination](../specs/007-search-pagination/spec.md) | Browse 50 question cards per page with bounded content reads and persistent selection | 001, 002 | Done |
 | 008 | [source-year-range](../specs/008-source-year-range/spec.md) | Optional inclusive "Desde" / "até" source-year filtering without rewriting legacy values | 007 | Done |
-| 009 | [preview-resize](../specs/009-preview-resize/spec.md) | Reproduce and fix question-preview resizing without stretching the outer UI | 008 (execution sequence) | Done |
+| 009 | [preview-resize](../specs/009-preview-resize/spec.md) | Reproduce and fix question-preview resizing without stretching the outer UI | 008 (execution sequence) | Done; visible-resize follow-up completed in 010 |
+| 010 | [preview-visible-resize](../specs/010-preview-visible-resize/spec.md) | Make preview growth visibly enlarge its card and reflow later cards without clipping | 009 implementation | Done; owner confirmed all scenarios checked |
 
 ## Owner-requested search fixes (2026-11-16)
 
 The owner requested plans for these three issues and confirmed 50 results per
 page and that the resize symptom concerns a question-card preview. Specs
-007–009 are implemented with platform checks complete. See
+007–009 were implemented with platform checks marked complete. The owner later
+reported preview clipping/no visible card reflow; 010 resolved that
+follow-up. See
 [the agent handoff](search-tab-fixes.md).
 
 Proposed next priority after 001/002: **007 → 008 → 009**, before the broader
@@ -54,11 +60,11 @@ implemented, preserve these public contracts and adapt their query tests.
 
 | Release | Contents |
 |---|---|
-| v2.0.0 | Implemented work in 001–004 and 007–009, plus 005 (schema change) and 006 |
+| v2.0.0 | Implemented work in 001–010, including the 005 schema change |
 
 The owner skipped the previously suggested v1.2.0 and v1.3.0 releases. The
 005/006 implementation and review fixes are included in source preparation for
-v2.0.0, and the application version is now 2.0.0. On 2026-11-18, the owner
+v2.0.0, and the application version is now 2.0.0. The later 010 resize follow-up is complete and accepted by the owner. On 2026-11-18, the owner
 authorized committing, pushing and merging this work while explicitly
 excluding app builds. Packaging, executable acceptance, publication and the
 release tag remain pending. See the [release notes](releases/v2.0.0.md).

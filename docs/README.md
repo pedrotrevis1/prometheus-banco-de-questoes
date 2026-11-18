@@ -23,12 +23,12 @@ coded, and the documents here are the source of truth for what the app should do
   constitution check. Written when the feature is about to be built.
 - **tasks.md** — ordered, checkable steps derived from the plan.
 
-Features 001 and 002 have all three. Features 003–006 have a spec only; their
-plans are deliberately left for when each one starts, because a plan written
-against code that is about to change goes stale. Features 007–009 have all
-three at the owner's explicit request for advance implementation instructions;
-they are Drafts, and agents must revalidate paths and prerequisites before
-implementing them. Their addition does not change released behavior.
+Specs 001–009 have implementation plans and tasks; consult the roadmap for
+their current delivery and verification status. Spec 010 has a Draft spec,
+plan, ordered tasks and recorded visual evidence at the owner's request for
+another agent to fix a remaining preview-resize defect. Its addition documents
+the existing failure and does not implement a behavior change. Revalidate paths
+and prerequisites before beginning implementation.
 
 ## Conventions
 

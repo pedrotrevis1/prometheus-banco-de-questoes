@@ -121,6 +121,7 @@ def test_card_reflow_moves_next_card_by_same_amount(preview_window):
     send_mouse(handle, QEvent.MouseButtonPress, origin, 0, Qt.LeftButton, Qt.LeftButton)
     send_mouse(handle, QEvent.MouseMove, origin, 80, Qt.NoButton, Qt.LeftButton)
     send_mouse(handle, QEvent.MouseButtonRelease, origin, 80, Qt.LeftButton, Qt.NoButton)
+    assert first.height() - before_height > 0
     assert second.mapToGlobal(QPoint(0, 0)).y() - before_y == first.height() - before_height
     assert first.view_panel.toPlainText() == before_text
 
@@ -207,3 +208,54 @@ def test_preview_cap_accounts_for_card_controls(preview_window):
     viewport_height, chrome_height = card._preview_geometry()
     assert card.view_panel.height() <= max(60, viewport_height - chrome_height)
     send_mouse(handle, QEvent.MouseButtonRelease, origin, 10000, Qt.LeftButton, Qt.NoButton)
+
+
+@pytest.mark.parametrize('expanded', [False, True])
+def test_visible_preview_growth_and_shrink_reflow(preview_window, expanded):
+    window = preview_window
+    window.conn.execute("UPDATE questoes SET tipo='Múltipla Escolha', alternativa_a='A', alternativa_b='B', alternativa_c='C', alternativa_d='D', alternativa_e='E', gabarito='A'")
+    window.conn.commit()
+    window.load_questions()
+    for _ in range(10): QApplication.processEvents()
+    first = window.scroll_layout.itemAt(0).widget()
+    second = window.scroll_layout.itemAt(1).widget()
+    if expanded:
+        first.btn_toggle.setChecked(True)
+        first.toggle_expansion()
+        for _ in range(10): QApplication.processEvents()
+    handle = first.resize_handle
+    origin = handle.mapToGlobal(handle.rect().center())
+    viewport = first.view_panel.viewport()
+    bar = window.scroll_area.verticalScrollBar()
+
+    def geometry():
+        for _ in range(10): QApplication.processEvents()
+        preview = first.view_panel
+        preview_top = preview.mapTo(first, QPoint(0, 0)).y()
+        handle_top = handle.mapTo(first, QPoint(0, 0)).y()
+        return (preview.height(), viewport.height(), first.height(), second.pos().y(),
+                preview_top, handle_top, bar.value())
+
+    before = geometry()
+    viewport_height, chrome = first._preview_geometry()
+    assert max(60, viewport_height - chrome) >= before[0] + 60
+    text = first.view_panel.toHtml()
+    send_mouse(handle, QEvent.MouseButtonPress, origin, 0, Qt.LeftButton, Qt.LeftButton)
+    for displacement in (20, 40, 60):
+        send_mouse(handle, QEvent.MouseMove, origin, displacement, Qt.NoButton, Qt.LeftButton)
+    grown = geometry()
+    assert grown[0] - before[0] == 60
+    assert grown[1] - before[1] == 60
+    assert grown[2] - before[2] == 60
+    assert grown[3] - before[3] == 60
+    assert grown[4] + grown[0] <= grown[5]
+    assert grown[5] + handle.height() <= grown[2]
+    assert grown[6] == before[6]
+    send_mouse(handle, QEvent.MouseMove, origin, 0, Qt.NoButton, Qt.LeftButton)
+    send_mouse(handle, QEvent.MouseButtonRelease, origin, 0, Qt.LeftButton, Qt.NoButton)
+    shrunk = geometry()
+    assert shrunk[:4] == before[:4]
+    assert shrunk[4] + shrunk[0] <= shrunk[5]
+    assert shrunk[5] + handle.height() <= shrunk[2]
+    assert shrunk[6] == before[6]
+    assert first.view_panel.toHtml() == text
