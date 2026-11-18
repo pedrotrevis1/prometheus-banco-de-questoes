@@ -1,6 +1,6 @@
 # Implementation plan: Start a new exam
 
-**Spec**: [spec.md](spec.md) | **Status**: Draft | **Created**: 2026-11-18
+**Spec**: [spec.md](spec.md) | **Status**: Done | **Created**: 2026-11-18
 
 ## Entry and existing boundaries
 

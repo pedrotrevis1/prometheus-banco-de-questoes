@@ -529,3 +529,314 @@ def test_card_usage_and_popup_follow_theme_and_metadata_stays_green(window):
     assert card.usage_control.palette().color(QPalette.Button) == QColor('#FFFFFF')
     assert card.metadata_widget.palette().color(QPalette.Window) == QColor('#DCFCE7')
     assert card.findChild(QLabel, 'CardIdentifier').palette().color(QPalette.WindowText) == QColor('#183D2B')
+
+
+def test_new_exam_resets_draft_filters_and_groups_controls(window, monkeypatch):
+    from PySide6.QtWidgets import QFrame
+    from PySide6.QtCore import Qt
+    window.show_filtered_questions()
+    window.selected_ids.add(1)
+    window.exam_order.ids = [1]
+    window.chk_multiple_versions.setChecked(True)
+    window.spin_version_count.setValue(5)
+    window.chk_include_answers.setChecked(False)
+    window.txt_search_question_text.setText('texto')
+    window.txt_search_source_year_from.setText('inválido')
+    window.tabs.setCurrentIndex(2)
+    monkeypatch.setattr('prometheus.app.QMessageBox.question', lambda *args: __import__('PySide6.QtWidgets', fromlist=['QMessageBox']).QMessageBox.Discard)
+    shared = window.selected_ids
+    window.btn_new_exam.click()
+    assert window.selected_ids is shared and not shared
+    assert window.exam_order.ids == [] and window.open_exam_id is None
+    assert window.tabs.currentIndex() == 1
+    assert window.txt_search_question_text.text() == '' and window.txt_search_source_year_from.text() == ''
+    assert not window.chk_multiple_versions.isChecked() and window.spin_version_count.value() == 2
+    assert window.chk_include_answers.isChecked() and not window.chk_separate_answers.isChecked()
+    assert window.cb_saved_exams.currentIndex() == -1
+    assert window.exam_snapshot == window.exam_draft()
+    assert window.lbl_open_exam.text() == 'Prova aberta: nova prova (não salva)'
+    panel = window.findChild(QFrame, 'ExamManagementPanel')
+    assert panel and panel.isAncestorOf(window.btn_new_exam) and panel.isAncestorOf(window.cb_saved_exams)
+
+
+def test_new_exam_cancel_keeps_current_draft(window, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    window.selected_ids.add(1)
+    window.tabs.setCurrentIndex(2)
+    window.txt_search_question_text.setText('preservar')
+    before = window.exam_draft()
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.Cancel)
+    window.btn_new_exam.click()
+    assert window.exam_draft() == before and window.tabs.currentIndex() == 2
+    assert window.txt_search_question_text.text() == 'preservar'
+
+
+def test_new_exam_refresh_failure_clears_stale_cards_and_retries(window, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    from prometheus.storage import saved_exams as storage
+    window.show_filtered_questions()
+    window.selected_ids.add(1)
+    old = window.scroll_layout.itemAt(0).widget()
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.Discard)
+    original = storage.question_usage_counts
+    monkeypatch.setattr(storage, 'question_usage_counts', lambda *args: (_ for _ in ()).throw(RuntimeError('erro sintético')))
+    window.btn_new_exam.click()
+    assert not window.selected_ids and window.scroll_layout.count() == 0
+    assert not old.usage_popup.isVisible()
+    assert 'Não foi possível' in window.lbl_result_range.text()
+    assert not window.btn_retry_search.isHidden()
+    monkeypatch.setattr(storage, 'question_usage_counts', original)
+    window.btn_retry_search.click()
+    assert window.scroll_layout.count() == 1 and window.btn_retry_search.isHidden()
+
+
+def test_new_exam_is_disabled_without_bank(window):
+    old = window.conn
+    window.conn = None
+    window.refresh_saved_exam_controls()
+    assert not window.btn_new_exam.isEnabled()
+    window.conn = old
+    window.refresh_saved_exam_controls()
+    assert window.btn_new_exam.isEnabled()
+
+
+def test_new_exam_resets_pending_filters_and_preserves_editor(window, monkeypatch):
+    from PySide6.QtCore import QDate, Qt
+    from PySide6.QtWidgets import QMessageBox, QTreeWidgetItem
+    window.txt_prompt.setPlainText('edição preservada')
+    window.txt_filter_search_subjects.setText('não encontrado')
+    item = QTreeWidgetItem(window.tree_search_subjects, ['Categoria sintética'])
+    item.setCheckState(0, Qt.Checked)
+    window.txt_search_question_source.setText('fonte')
+    window.txt_search_source_year_from.setText('inválido')
+    window.txt_search_source_year_to.setText('2020')
+    window.search_diff_checkboxes['Fácil'].setChecked(True)
+    window.search_year_checkboxes['2ª Série'].setChecked(True)
+    window.search_type_checkboxes['Dissertativa'].setChecked(True)
+    window.cb_usage_filter.setCurrentIndex(window.cb_usage_filter.findData('since'))
+    window.date_usage_filter.setDate(QDate(2020, 1, 2))
+    window.selected_ids.add(1)
+    window.search_view.set_selected_only(True)
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.Discard)
+    window.btn_new_exam.click()
+    assert window.txt_prompt.toPlainText() == 'edição preservada'
+    assert item.checkState(0) == Qt.Unchecked and not item.isHidden()
+    assert not window.txt_filter_search_subjects.text() and not window.txt_search_question_source.text()
+    assert not window.txt_search_source_year_from.text() and not window.txt_search_source_year_to.text()
+    assert window.search_diff_checkboxes['Todas as Dificuldades'].isChecked()
+    assert window.search_year_checkboxes['Todos os Anos'].isChecked()
+    assert window.search_type_checkboxes['Todos os Tipos'].isChecked()
+    assert window.cb_usage_filter.currentData() == 'all' and window.date_usage_filter.date() == QDate.currentDate()
+    assert not window.date_usage_filter.isEnabled() and not window.search_view.selected_only
+    assert window.search_view.page == 1 and window.search_view.applied.text == ''
+    assert not window.btn_browse_selected_questions.isChecked() and not window.btn_browse_selected_questions.isEnabled()
+    window.btn_new_exam.click()
+    assert window.exam_snapshot == window.exam_draft()
+
+
+def test_new_exam_with_empty_bank(window):
+    window.conn.execute('DELETE FROM normalized_questions')
+    window.conn.commit()
+    window.show_filtered_questions()
+    window.btn_new_exam.click()
+    assert window.scroll_layout.count() == 0
+    assert 'Nenhuma' in window.lbl_result_range.text()
+    assert window.exam_snapshot == window.exam_draft()
+
+
+@pytest.mark.parametrize('mode', ['save', 'name_cancel', 'save_error', 'discard', 'cancel'])
+def test_new_exam_guard_preserves_or_saves_draft(window, monkeypatch, mode):
+    from PySide6.QtWidgets import QMessageBox
+    window.selected_ids.add(1)
+    window.txt_search_question_text.setText('filtro pendente')
+    window.tabs.setCurrentIndex(2)
+    window.chk_shuffle_questions.setChecked(True)
+    old_draft = window.exam_draft()
+    answer = {'save': QMessageBox.Save, 'name_cancel': QMessageBox.Save,
+              'save_error': QMessageBox.Save, 'discard': QMessageBox.Discard,
+              'cancel': QMessageBox.Cancel}[mode]
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: answer)
+    monkeypatch.setattr(window, 'get_text_prompt', lambda *args: None if mode == 'name_cancel' else 'Primeira prova')
+    if mode == 'save_error':
+        monkeypatch.setattr(saved_exams, 'save_exam', lambda *args: (_ for _ in ()).throw(RuntimeError('erro sintético')))
+    window.btn_new_exam.click()
+    if mode in ('name_cancel', 'save_error', 'cancel'):
+        assert window.exam_draft() == old_draft and window.tabs.currentIndex() == 2
+        assert window.txt_search_question_text.text() == 'filtro pendente'
+        assert window.open_exam_id is None
+    else:
+        assert window.exam_draft() == window.exam_snapshot and not window.selected_ids
+        assert window.open_exam_id is None and window.tabs.currentIndex() == 1
+    rows = saved_exams.list_exams(window.conn)
+    assert len(rows) == (1 if mode == 'save' else 0)
+    if mode == 'save':
+        assert saved_exams.load_exam(window.conn, rows[0][0])['question_ids'] == (1,)
+
+
+def test_new_exam_after_generation_keeps_saved_exam_and_separates_new_one(window, monkeypatch, tmp_path):
+    from PySide6.QtWidgets import QFileDialog
+    window.conn.execute("INSERT INTO normalized_questions (id,kind,difficulty,statement,statement_text,search_text,created_at,updated_at,keep_alternative_order) VALUES (2,'essay','easy','B','B','B','a','a',0)")
+    window.conn.commit()
+    names = iter(['Prova A', 'Prova B'])
+    monkeypatch.setattr(window, 'get_text_prompt', lambda *args: next(names))
+    monkeypatch.setattr(window, 'show_confirm', lambda *args: True)
+    files = iter([str(tmp_path / 'a.docx'), str(tmp_path / 'b.docx')])
+    monkeypatch.setattr(QFileDialog, 'getSaveFileName', lambda *args, **kwargs: (next(files), ''))
+    window.selected_ids.add(1)
+    window.generate_word_doc()
+    first = window.open_exam_id
+    first_exam = saved_exams.load_exam(window.conn, first)
+    first_versions = saved_exams.versions(window.conn, first)
+    first_usages = saved_exams.question_usages(window.conn, 1)
+    window.btn_new_exam.click()
+    assert window.open_exam_id is None and not window.selected_ids
+    assert saved_exams.load_exam(window.conn, first) == first_exam
+    assert saved_exams.versions(window.conn, first) == first_versions
+    assert saved_exams.question_usages(window.conn, 1) == first_usages
+    window.selected_ids.add(2)
+    assert saved_exams.question_usages(window.conn, 2) == []
+    window.generate_word_doc()
+    second = window.open_exam_id
+    assert second != first and saved_exams.load_exam(window.conn, second)['question_ids'] == (2,)
+    assert len(saved_exams.question_usages(window.conn, 2)) == 1
+    window.btn_new_exam.click()
+    for exam_id, expected in ((first, {1}), (second, {2})):
+        window.cb_saved_exams.setCurrentIndex(window.cb_saved_exams.findData(exam_id))
+        window.open_saved_exam()
+        assert window.selected_ids == expected
+        window.btn_new_exam.click()
+    assert len(saved_exams.list_exams(window.conn)) == 2
+
+
+def test_new_exam_discard_preserves_saved_tables_and_hidden_selection_clears(window, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    exam_id = saved_exams.save_exam(window.conn, 'Original', None, {}, [1])
+    saved_exams.record_generation(window.conn, exam_id, [[]], [1], used_at='2026-01-01')
+    tables = ('saved_exams', 'saved_exam_questions', 'exam_usages', 'exam_usage_questions', 'exam_versions', 'normalized_questions')
+    before = {name: window.conn.execute('SELECT * FROM ' + name).fetchall() for name in tables}
+    window.open_exam_id = exam_id
+    window.exam_snapshot = window.exam_draft()
+    window.selected_ids.update((1, 99))
+    window.search_view.set_selected_only(True)
+    window.exam_order.ids = [99, 1]
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.Discard)
+    window.btn_new_exam.click()
+    assert not window.selected_ids and not window.exam_order.ids and not window.search_view.selected_only
+    assert {name: window.conn.execute('SELECT * FROM ' + name).fetchall() for name in tables} == before
+
+
+def test_new_exam_cancel_does_not_synchronize_order(window, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    window.exam_order.ids = [99]
+    window.selected_ids.add(1)
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.Cancel)
+    window.btn_new_exam.click()
+    assert window.exam_order.ids == [99] and window.selected_ids == {1}
+
+
+@pytest.mark.parametrize('choice', ['save', 'discard', 'cancel'])
+def test_new_exam_guard_on_open_saved_draft(window, monkeypatch, choice):
+    from PySide6.QtWidgets import QMessageBox
+    window.selected_ids.add(1)
+    monkeypatch.setattr(window, 'get_text_prompt', lambda *args: 'Existente')
+    assert window.save_current_exam()
+    exam_id = window.open_exam_id
+    previous = saved_exams.load_exam(window.conn, exam_id)
+    window.chk_include_answers.setChecked(False)
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: {'save': QMessageBox.Save,
+                        'discard': QMessageBox.Discard, 'cancel': QMessageBox.Cancel}[choice])
+    window.btn_new_exam.click()
+    saved = saved_exams.load_exam(window.conn, exam_id)
+    if choice == 'cancel':
+        assert window.open_exam_id == exam_id and not window.chk_include_answers.isChecked()
+        assert saved == previous
+    else:
+        assert window.open_exam_id is None and not window.selected_ids
+        assert saved['settings']['include_answers'] == (choice != 'save')
+
+
+def test_new_exam_does_not_reuse_shuffled_arrangements(window, monkeypatch, tmp_path):
+    from PySide6.QtWidgets import QFileDialog
+    window.conn.executemany("INSERT INTO normalized_questions (id,kind,difficulty,statement,statement_text,search_text,created_at,updated_at,keep_alternative_order) VALUES (?, 'essay','easy',?,?,?,'a','a',0)", [(2,'B','B','B'), (3,'C','C','C')])
+    window.conn.commit()
+    names = iter(['Prova A', 'Prova B'])
+    monkeypatch.setattr(window, 'get_text_prompt', lambda *args: next(names))
+    monkeypatch.setattr(window, 'show_confirm', lambda *args: True)
+    files = iter([str(tmp_path / 'a.docx'), str(tmp_path / 'b.docx')])
+    monkeypatch.setattr(QFileDialog, 'getSaveFileName', lambda *args, **kwargs: (next(files), ''))
+    window.selected_ids.update((1, 2))
+    window.chk_multiple_versions.setChecked(True)
+    window.chk_shuffle_questions.setChecked(True)
+    window.generate_word_doc()
+    first = window.open_exam_id
+    first_versions = saved_exams.versions(window.conn, first)
+    assert len(first_versions) == 2
+    window.btn_new_exam.click()
+    assert not window.chk_multiple_versions.isChecked() and not window.chk_shuffle_questions.isChecked()
+    window.selected_ids.add(3)
+    window.generate_word_doc()
+    second = window.open_exam_id
+    assert second != first and len(saved_exams.versions(window.conn, second)) == 1
+    assert saved_exams.versions(window.conn, first) == first_versions
+    assert len(saved_exams.question_usages(window.conn, 1)) == 1
+    assert len(saved_exams.question_usages(window.conn, 3)) == 1
+
+
+def test_management_panel_fits_and_tracks_theme(window):
+    from PySide6.QtWidgets import QFrame, QPushButton
+    from PySide6.QtGui import QColor, QPalette
+    window.resize(1250, 850)
+    window.tabs.setCurrentIndex(2)
+    window.show()
+    for _ in range(4): QApplication.processEvents()
+    panel = window.findChild(QFrame, 'ExamManagementPanel')
+    buttons = panel.findChildren(QPushButton)
+    assert [button.text() for button in buttons] == ['Nova prova', 'Abrir', 'Salvar', 'Salvar como', 'Renomear', 'Duplicar', 'Excluir']
+    assert all(panel.rect().contains(button.mapTo(panel, button.rect().bottomRight())) for button in buttons)
+    assert panel.palette().color(QPalette.Window) == QColor('#FFFFFF')
+    window.is_dark_mode = True
+    window.apply_theme()
+    QApplication.processEvents()
+    assert panel.palette().color(QPalette.Window) == QColor('#252538')
+
+
+def test_new_exam_save_failure_reading_existing_exam_preserves_draft(window, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    window.selected_ids.add(1)
+    monkeypatch.setattr(window, 'get_text_prompt', lambda *args: 'Existente')
+    assert window.save_current_exam()
+    exam_id = window.open_exam_id
+    window.chk_include_answers.setChecked(False)
+    before = window.exam_draft()
+    alerts = []
+    monkeypatch.setattr(window, 'show_alert', lambda *args: alerts.append(args))
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.Save)
+    monkeypatch.setattr(saved_exams, 'load_exam', lambda *args: (_ for _ in ()).throw(RuntimeError('erro sintético')))
+    window.btn_new_exam.click()
+    assert window.open_exam_id == exam_id and window.exam_draft() == before
+    assert alerts and 'erro sintético' in alerts[-1][1]
+
+
+def test_generate_suggests_saved_exam_name_in_file_dialog(window, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog
+    suggestions = []
+    monkeypatch.setattr(window, 'get_text_prompt', lambda *args: 'Prova de Biologia')
+    monkeypatch.setattr(QFileDialog, 'getSaveFileName', lambda *args: (suggestions.append(args[2]) or '', ''))
+    window.selected_ids.add(1)
+    window.generate_word_doc()
+    assert suggestions == ['Prova de Biologia.docx']
+    assert saved_exams.load_exam(window.conn, window.open_exam_id)['name'] == 'Prova de Biologia'
+
+
+def test_generate_suggests_open_exam_name_not_picker_selection(window, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog
+    monkeypatch.setattr(window, 'get_text_prompt', lambda *args: 'Prova original')
+    window.selected_ids.add(1)
+    assert window.save_current_exam()
+    saved_exams.save_exam(window.conn, 'Outra prova', None, window.exam_draft()[2], [1])
+    window.refresh_saved_exam_controls(window.open_exam_id)
+    window.cb_saved_exams.setCurrentIndex(window.cb_saved_exams.findText('Outra prova'))
+    suggestions = []
+    monkeypatch.setattr(QFileDialog, 'getSaveFileName', lambda *args: (suggestions.append(args[2]) or '', ''))
+    window.generate_word_doc()
+    assert suggestions == ['Prova original.docx']

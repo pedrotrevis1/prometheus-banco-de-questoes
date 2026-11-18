@@ -129,7 +129,8 @@ Data structures are in [data-model.md](data-model.md).
 - **BL-043** Each card has a "Selecionar" checkbox. A counter shows how many
   questions are selected for the exam. The selection is kept while filtering or changing pages
   and can be saved as part of an exam. Unsaved changes prompt for save, discard
-  or cancel before closing or switching banks.
+  or cancel before closing or switching banks. Starting a new exam clears all
+  selected questions and exits selected-only browsing after the save guard.
 - **BL-044** "Navegar pelas questões selecionadas" shows only selected
   questions in pages; leaving it restores the last applied search.
 - **BL-045** "Excluir questões selecionadas" permanently deletes every selected
@@ -150,7 +151,9 @@ Data structures are in [data-model.md](data-model.md).
   a separate matching file, or omitted.
 - **BL-053** Multiple versions are numbered and use filenames
   `<name>_Versao_<n>.docx`; the version appears in the document and footer.
-  Single-version documents do not show a version label.
+  Single-version documents do not show a version label. For saved exams, the
+  editable save-dialog filename is suggested from the saved exam name, with
+  characters unsafe for Windows/macOS filenames replaced.
 - **BL-054** When shuffling is enabled, generated versions must have distinct
   visible question content or generation reports that it could not produce them.
   Version labels, answer keys and incidental text-run boundaries do not make
@@ -167,6 +170,9 @@ Data structures are in [data-model.md](data-model.md).
   also removes its usage history after confirmation; questions are retained.
   Refreshing exam and class controls retains the selected class, or selects
   "Sem turma" if it was deleted. Existing usage records keep their class name.
+  The "Gerenciar provas" panel offers "Nova prova"; after the unsaved-work
+  guard, it resets exam preparation and search filters, returning to search
+  while preserving saved exams and histories.
 - **BL-059** Completed generation records the date, class, version count and
   included questions. Regeneration retains compatible saved arrangements but
   uses current question content and correct answers. A changed or missing
@@ -191,7 +197,7 @@ Data structures are in [data-model.md](data-model.md).
 | KD-17 | Tables and lists in pasted content are flattened in the exam | Backlog |
 | KD-20 | Dragging a question-preview handle changes its scrollbar but can leave the enlarged preview clipped by its card, with the next card almost stationary; owner recording reviewed 2026-11-18; reproduced and fixed in synthetic source tests | [010: preview-visible-resize](../010-preview-visible-resize/spec.md), resolved; owner confirmed all scenarios checked |
 | KD-21 | Compact card layout and on-demand usage history are implemented; the owner accepted closure with unperformed native checks documented. | [011: compact-question-cards](../011-compact-question-cards/spec.md) |
-| KD-22 | Saved-exam controls have no explicit action to detach the current exam and begin a fresh empty selection; the owner reports restarting between exams (2026-11-18) | [012: new-exam-workflow](../012-new-exam-workflow/spec.md), Draft; not implemented |
+| KD-22 | A guarded "Nova prova" action resets exam preparation without restarting; the owner confirmed the visual test and authorized acceptance closure. | [012: new-exam-workflow](../012-new-exam-workflow/spec.md) |
 
 Planning note: spec 005 remains subject to owner verification using real banks
 and exported documents before release.

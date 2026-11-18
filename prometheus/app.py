@@ -1,5 +1,7 @@
 from prometheus.domain.card_data import card_metadata, actions_below_metadata, wrap_long_tokens
 from prometheus.domain.exam_order import ExamOrder
+from prometheus.domain.exam_session import (exam_draft as make_exam_draft, is_dirty, guard_allows,
+    fresh_exam, generation_defaults)
 from prometheus.domain.exam_arrangements import capture_arrangements, restore_arrangements
 from prometheus.domain.usage_history import usage_count_label, usage_entries
 from prometheus.storage import saved_exams
@@ -13,7 +15,7 @@ from prometheus.storage.normalized_exams import (fetch_ordered_questions as fetc
     fetch_question_summaries as fetch_normalized_question_summaries)
 from prometheus.domain.normalized_versions import generate_versions as generate_normalized_versions
 from prometheus.export.documents import build_exam_documents, exam_content_fingerprint
-from prometheus.export.files import output_paths, publish_documents, PublicationError
+from prometheus.export.files import output_paths, publish_documents, PublicationError, suggested_exam_filename
 from prometheus.export.images import inspect_question_images
 from prometheus.export.images import embed_html_images, clipboard_image_data, ImageReadError
 from prometheus.domain.questions import (RichContent, QuestionDraft, QuestionValidationError,
@@ -52,7 +54,7 @@ from PySide6.QtWidgets import (
     QLabel, QLineEdit, QPushButton, QFileDialog, QTabWidget,
     QComboBox, QTextEdit, QCheckBox, QMessageBox, QScrollArea,
     QFrame, QButtonGroup, QSizePolicy, QStyledItemDelegate, QListView,
-    QTreeWidget, QTreeWidgetItem, QListWidget, QDialog, QFormLayout, QToolButton, QInputDialog,
+    QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator, QListWidget, QDialog, QFormLayout, QToolButton, QInputDialog,
     QRadioButton, QGridLayout, QProxyStyle, QStyle, QHeaderView, QStyleFactory, QSpinBox, QDateEdit,
     QStyleOptionComboBox, QStyleOptionSpinBox, QBoxLayout
 )
@@ -91,7 +93,7 @@ QLabel { background-color: transparent; color: #E2E8F0; font-weight: 500; }
 #YearSegmentDivider { background-color: #45475A; min-height: 1px; max-height: 1px; border: none; }
 #FilterSectionDivider { background-color: #45475A; min-height: 3px; max-height: 3px; border: none; }
 #FilterHeaderLabel { background-color: #294338; color: #A7F3D0; font-weight: bold; border-radius: 5px; padding: 5px; }
-#GenerationOptionsPanel { background-color: #252538; border: 1px solid #45475A; border-radius: 10px; }
+#GenerationOptionsPanel, #ExamManagementPanel { background-color: #252538; border: 1px solid #45475A; border-radius: 10px; }
 #RegisterScrollContent, #SearchFilterContent, #QuestionResultsContent { background-color: #1E1E2E; }
 #GenerationSectionTitle { font-size: 16px; font-weight: bold; color: #E2E8F0; }
 QLineEdit, QTextEdit, QComboBox { background-color: #313244; border: 1px solid #45475A; border-radius: 6px; padding: 8px; color: #FFFFFF; }
@@ -153,7 +155,7 @@ QLabel { background-color: transparent; color: #334155; font-weight: 500; }
 #YearSegmentDivider { background-color: #CBD5E1; min-height: 1px; max-height: 1px; border: none; }
 #FilterSectionDivider { background-color: #CBD5E1; min-height: 3px; max-height: 3px; border: none; }
 #FilterHeaderLabel { background-color: #DCFCE7; color: #166534; font-weight: bold; border-radius: 5px; padding: 5px; }
-#GenerationOptionsPanel { background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 10px; }
+#GenerationOptionsPanel, #ExamManagementPanel { background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 10px; }
 #RegisterScrollContent, #SearchFilterContent, #QuestionResultsContent { background-color: #F8FAFC; }
 #GenerationSectionTitle { font-size: 16px; font-weight: bold; color: #334155; }
 QLineEdit, QTextEdit, QComboBox { background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 6px; padding: 8px; color: #0F172A; }
@@ -279,7 +281,7 @@ def windows_theme(base_theme, dark=False):
         border: 1px solid %(danger)s; }
     QPushButton#DangerButton:hover { background: %(danger_hover)s; border-color: %(danger_hover)s; }
     QPushButton#PrimaryButton:focus, QPushButton#DangerButton:focus { border-color: %(text)s; }
-    #RichTextEditorPanel, #FormattingToolbar, #AltsContainer, #GenerationOptionsPanel {
+    #RichTextEditorPanel, #FormattingToolbar, #AltsContainer, #GenerationOptionsPanel, #ExamManagementPanel {
         border-radius: 5px; }
     #RichTextEditorPanel { background: %(surface)s; }
     #RichTextEditorPanel #FormattingToolbar { background: transparent; }
@@ -2950,6 +2952,11 @@ class ExamGeneratorApp(QMainWindow):
         pager = QHBoxLayout()
         self.lbl_result_range = QLabel("Nenhuma questão encontrada")
         pager.addWidget(self.lbl_result_range, stretch=1)
+        self.btn_retry_search = QPushButton("Tentar novamente")
+        self.btn_retry_search.setObjectName("RetrySearchButton")
+        self.btn_retry_search.hide()
+        self.btn_retry_search.clicked.connect(self.retry_new_exam_search)
+        pager.addWidget(self.btn_retry_search)
         self.btn_previous_page = QPushButton("Anterior")
         self.btn_previous_page.clicked.connect(lambda: self.move_search_page(self.search_view.page - 1))
         pager.addWidget(self.btn_previous_page)
@@ -3083,6 +3090,7 @@ class ExamGeneratorApp(QMainWindow):
                     dispose_question_card(widget)
             for card in cards:
                 self.scroll_layout.addWidget(card)
+            self.btn_retry_search.hide()
             self.search_view.page = bounds.page or 1
             self.lbl_result_range.setText(
                 f"Mostrando {bounds.start}–{bounds.end} de {bounds.total} questões"
@@ -3242,19 +3250,43 @@ class ExamGeneratorApp(QMainWindow):
         lbl_title.setObjectName("HeaderLabel")
         content_layout.addWidget(lbl_title)
 
+        management = QFrame()
+        management.setObjectName("ExamManagementPanel")
+        management_layout = QVBoxLayout(management)
+        management_layout.setContentsMargins(24, 20, 24, 20)
+        management_layout.setSpacing(12)
+        management_title = QLabel("Gerenciar provas")
+        management_title.setObjectName("FilterHeaderLabel")
+        management_title.setAlignment(Qt.AlignCenter)
+        management_layout.addWidget(management_title)
+        draft_row = QHBoxLayout()
+        self.btn_new_exam = QPushButton("Nova prova")
+        self.btn_new_exam.setObjectName("NewExamButton")
+        self.btn_new_exam.setEnabled(False)
+        self.btn_new_exam.clicked.connect(self.start_new_exam)
+        draft_row.addWidget(self.btn_new_exam)
+        draft_row.addStretch()
+        management_layout.addLayout(draft_row)
         saved_row = QHBoxLayout()
         self.cb_saved_exams = QComboBox()
         saved_row.addWidget(self.cb_saved_exams, 1)
-        for label, callback in (("Abrir", self.open_saved_exam), ("Salvar", self.save_current_exam),
+        open_button = QPushButton("Abrir")
+        open_button.clicked.connect(self.open_saved_exam)
+        saved_row.addWidget(open_button)
+        management_layout.addLayout(saved_row)
+        actions_row = QHBoxLayout()
+        for label, callback in (("Salvar", self.save_current_exam),
                                 ("Salvar como", lambda: self.save_current_exam(True)),
                                 ("Renomear", self.rename_saved_exam), ("Duplicar", self.duplicate_saved_exam),
                                 ("Excluir", self.delete_saved_exam)):
             button = QPushButton(label)
             button.clicked.connect(callback)
-            saved_row.addWidget(button)
-        content_layout.addLayout(saved_row)
+            actions_row.addWidget(button)
+        actions_row.addStretch()
+        management_layout.addLayout(actions_row)
         self.lbl_open_exam = QLabel("Prova aberta: nenhuma")
-        content_layout.addWidget(self.lbl_open_exam)
+        management_layout.addWidget(self.lbl_open_exam)
+        content_layout.addWidget(management)
         class_row = QHBoxLayout()
         class_row.addWidget(QLabel("Turma:"))
         self.cb_exam_class = QComboBox()
@@ -3361,9 +3393,10 @@ class ExamGeneratorApp(QMainWindow):
                     'shuffle_alternatives': self.chk_shuffle_alternatives.isChecked(),
                     'include_answers': self.chk_include_answers.isChecked(),
                     'separate_answers': self.chk_separate_answers.isChecked()}
-        return (tuple(self.exam_order.synchronize(self.selected_ids)), self.cb_exam_class.currentData(), settings)
+        return make_exam_draft(self.exam_order.preview(self.selected_ids), self.cb_exam_class.currentData(), settings)
 
     def refresh_saved_exam_controls(self, selected=None):
+        self.btn_new_exam.setEnabled(bool(self.conn))
         class_id = self.cb_exam_class.currentData()
         self.cb_saved_exams.clear()
         self.cb_exam_class.clear()
@@ -3385,10 +3418,10 @@ class ExamGeneratorApp(QMainWindow):
             name = self.get_text_prompt("Salvar prova", "Nome da prova:")
             if not name:
                 return False
-        else:
-            name = saved_exams.load_exam(self.conn, exam_id)['name']
-        ids, class_id, settings = self.exam_draft()
         try:
+            if exam_id is not None:
+                name = saved_exams.load_exam(self.conn, exam_id)['name']
+            ids, class_id, settings = self.exam_draft()
             self.open_exam_id = saved_exams.save_exam(self.conn, name, class_id, settings, ids, exam_id)
             self.lbl_open_exam.setText(f"Prova aberta: {name}")
             self.refresh_saved_exam_controls(self.open_exam_id)
@@ -3401,13 +3434,90 @@ class ExamGeneratorApp(QMainWindow):
 
     def confirm_save_exam(self):
         if (not self.conn or self.conn.execute('PRAGMA user_version').fetchone()[0] < 6 or
-                self.exam_snapshot is None or self.exam_draft() == self.exam_snapshot):
+                not is_dirty(self.exam_snapshot, self.exam_draft())):
             return True
         answer = QMessageBox.question(self, "Alterações na prova", "Deseja salvar as alterações da prova?",
                                       QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel, QMessageBox.Save)
         if answer == QMessageBox.Save:
-            return self.save_current_exam()
-        return answer == QMessageBox.Discard
+            return guard_allows("save", self.save_current_exam())
+        return guard_allows("discard" if answer == QMessageBox.Discard else "cancel")
+
+    def start_new_exam(self):
+        if not self.conn:
+            return
+        if is_dirty(self.exam_snapshot, self.exam_draft()):
+            answer = QMessageBox.question(
+                self, "Nova prova", "As alterações não salvas da prova atual serão substituídas. Deseja salvá-las?",
+                QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel, QMessageBox.Save)
+            if answer == QMessageBox.Save:
+                if not guard_allows("save", self.save_current_exam()):
+                    return
+            elif not guard_allows("discard" if answer == QMessageBox.Discard else "cancel"):
+                return
+
+        normalized = self.conn.execute('PRAGMA user_version').fetchone()[0] >= 4
+        filters = NormalizedSearchFilters() if normalized else SearchFilters()
+        fresh_exam(self.search_view, self.exam_order, filters)
+        self.open_exam_id = None
+        self.cb_saved_exams.setCurrentIndex(-1)
+        self.cb_exam_class.setCurrentIndex(0)
+        self.lbl_open_exam.setText("Prova aberta: nova prova (não salva)")
+        defaults = generation_defaults()
+        self.chk_multiple_versions.setChecked(defaults['multiple'])
+        self.spin_version_count.setValue(defaults['count'])
+        self.chk_shuffle_questions.setChecked(defaults['shuffle_questions'])
+        self.chk_shuffle_alternatives.setChecked(defaults['shuffle_alternatives'])
+        self.chk_include_answers.setChecked(defaults['include_answers'])
+        self.chk_separate_answers.setChecked(defaults['separate_answers'])
+        self.update_multi_version_controls()
+        self.chk_separate_answers.setEnabled(True)
+        for field in (self.txt_filter_search_subjects, self.txt_search_question_text,
+                      self.txt_search_question_source, self.txt_search_source_year_from,
+                      self.txt_search_source_year_to):
+            field.clear()
+        self.filter_tree_by_text('', self.tree_search_subjects)
+        self.tree_search_subjects.blockSignals(True)
+        iterator = QTreeWidgetItemIterator(self.tree_search_subjects)
+        while iterator.value():
+            iterator.value().setCheckState(0, Qt.Unchecked)
+            iterator += 1
+        self.tree_search_subjects.blockSignals(False)
+        for group, all_label in ((self.search_diff_group, "Todas as Dificuldades"),
+                                 (self.search_year_group, "Todos os Anos"),
+                                 (self.search_type_group, "Todos os Tipos")):
+            for button in group.buttons():
+                button.setChecked(button.text() == all_label)
+        self.cb_usage_filter.setCurrentIndex(0)
+        self.date_usage_filter.setDate(QDate.currentDate())
+        self.date_usage_filter.setEnabled(False)
+        self.search_view.applied = self.current_search_filters((None, None))
+        self.btn_browse_selected_questions.blockSignals(True)
+        self.btn_browse_selected_questions.setChecked(False)
+        self.btn_browse_selected_questions.blockSignals(False)
+        self.btn_browse_selected_questions.setText("Navegar pelas questões selecionadas")
+        self.btn_browse_selected_questions.setEnabled(False)
+        self.btn_delete_selected_questions.setEnabled(False)
+        self.lbl_selected_count.setText("0 questão(ões) selecionada(s) para a prova")
+        self.refresh_exam_order()
+        self.exam_snapshot = self.exam_draft()
+        if not self.load_questions():
+            while self.scroll_layout.count():
+                widget = self.scroll_layout.takeAt(0).widget()
+                if widget:
+                    dispose_question_card(widget)
+            self.lbl_result_range.setText("Não foi possível carregar as questões.")
+            self.lbl_page_count.setText("Página 0 de 0")
+            self.btn_previous_page.setEnabled(False)
+            self.btn_next_page.setEnabled(False)
+            self.page_selector.setEnabled(False)
+            self.btn_retry_search.show()
+        self.scroll_area.verticalScrollBar().setValue(0)
+        self.tabs.setCurrentIndex(1)
+        self.txt_search_question_text.setFocus()
+
+    def retry_new_exam_search(self):
+        if self.conn and self.load_questions():
+            self.scroll_area.verticalScrollBar().setValue(0)
 
     def open_saved_exam(self):
         exam_id = self.cb_saved_exams.currentData()
@@ -3598,8 +3708,10 @@ class ExamGeneratorApp(QMainWindow):
                 if not self.show_confirm("Imagens não exportáveis", message + "\n\nContinuar sem essas imagens?"):
                     return
                 acknowledged = {(issue.question_id, issue.source) for issue in issues}
+            suggested = (suggested_exam_filename(saved_exams.load_exam(self.conn, self.open_exam_id)['name'])
+                         if saved_exam_enabled else f"Prova_{self.current_discipline}.docx")
             file_path, _ = QFileDialog.getSaveFileName(
-                self, "Salvar Prova", f"Prova_{self.current_discipline}.docx", "Word Document (*.docx)")
+                self, "Salvar Prova", suggested, "Word Document (*.docx)")
             if not file_path:
                 return
             paths = output_paths(file_path, count, placement)

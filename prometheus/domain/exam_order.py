@@ -5,11 +5,14 @@ class ExamOrder:
     def __init__(self):
         self.ids = []
 
-    def synchronize(self, selected):
+    def preview(self, selected):
         selected = set(selected)
-        self.ids = [question_id for question_id in self.ids if question_id in selected]
-        known = set(self.ids)
-        self.ids.extend(sorted(selected - known))
+        retained = [question_id for question_id in self.ids if question_id in selected]
+        known = set(retained)
+        return tuple(retained + sorted(selected - known))
+
+    def synchronize(self, selected):
+        self.ids = list(self.preview(selected))
         return tuple(self.ids)
 
     def move(self, index, delta):

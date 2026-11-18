@@ -42,6 +42,10 @@ class SearchViewState:
         self.selected_only = False
         self.page = 1
 
+    def reset(self, filters):
+        self.selected_ids.clear()
+        self.apply(filters)
+
     def set_selected_only(self, checked):
         if checked and not self.selected_ids:
             return False

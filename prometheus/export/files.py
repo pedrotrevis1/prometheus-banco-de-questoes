@@ -10,6 +10,20 @@ class PublicationError(Exception):
         super().__init__(message)
 
 
+def suggested_exam_filename(name):
+    """Suggest an editable, portable filename without changing the stored name."""
+    safe = ''.join('_' if char in '<>:"/\\|?*' or ord(char) < 32 or ord(char) == 127 else char
+                   for char in str(name or '')).strip(' .')
+    if safe.lower().endswith('.docx'):
+        safe = safe[:-5].rstrip(' .')
+    if not safe:
+        safe = 'Prova'
+    reserved = {'CON', 'PRN', 'AUX', 'NUL'} | {f'{prefix}{number}' for prefix in ('COM', 'LPT') for number in range(1, 10)}
+    if safe.split('.', 1)[0].upper() in reserved:
+        safe = '_' + safe
+    return safe + '.docx'
+
+
 def output_paths(path, count, answer_placement):
     path = Path(path)
     if path.suffix and path.suffix.lower() != '.docx':
