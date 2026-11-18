@@ -30,7 +30,7 @@
 ## Phase 4 — Build and docs
 
 - [x] T017 Establish a new build command with the owner’s authorization; add `build_windows.ps1` including the asset.
-- [ ] T018 Pending: build on Windows; verify the app starts and "Sobre" → Pix shows the QR code. The owner cannot perform this check now.
+- [x] T018 Build on Windows and verify the application and Pix QR code. The owner confirmed the implemented functionality works on Windows and macOS on 2026-11-17.
 - [x] T019 Update the README developer section (install, run, test, build) and the file references.
 - [x] T020 Regression: an offscreen automated workflow opened a copy of the owner’s bank, registered and filtered a question, and generated a two-version exam; the owner confirmed the interface looks correct.
 - [x] T021 Update `docs/architecture.md` "Current state" and `docs/roadmap.md` status.

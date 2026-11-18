@@ -41,7 +41,7 @@
 
 ## Phase 7 — Verification and docs
 
-- [ ] T021 Manual checklist on Windows:
+- [x] T021 Manual checklist on Windows: owner confirmed platform checks complete on 2026-11-17.
   - rename a bank file on disk, start the app → dialog, relink works, no new file appears
   - open a `.txt` renamed to `.db` and an unrelated SQLite file → error, file unchanged
   - open a copy of a real v1.1 bank → content identical, one automatic backup created
@@ -49,7 +49,7 @@
   - duplicate discipline name rejected in both flows; rename and remove work
   - confirm bulk deletion still uses the current selection, including hidden questions
 - [x] T022 Update `specs/000-baseline/` (BL-012 to BL-016, BL-045, data-model `user_version`, KD table), `docs/architecture.md`, `docs/roadmap.md`, README backup section.
-- [ ] T023 Bump the version to 1.2.0, build, tag `v1.2.0`.
+- [x] T023 Skipped by owner decision: no 1.2.0 version bump, build or tag; the next planned release is 2.0.0 after 005 and 006.
 
 ## Ordered review follow-up
 

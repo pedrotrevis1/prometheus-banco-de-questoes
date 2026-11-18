@@ -3,7 +3,7 @@
 **Plan**: [plan.md](plan.md) | **Status**: In progress
 
 Do tasks in order, one at a time. Mark a task only after its validation
-passes. Platform checks remain pending as noted below.
+passes. The owner marked platform checks complete on 2026-11-17.
 
 - [x] T001 Read the handoff, constitution and roadmap; verify 001/002 implementation is merged and reconcile package paths and the owner’s bulk-delete decision. Windows verification and release tasks remain pending by owner direction.
 - [x] T002 Extract existing search filtering/query and selection-view state into domain/storage modules without behavior changes; add characterization tests for every existing filter, category token boundaries, legacy school-year JSON and selected-only bypass. Keep the widget as a delegate.
@@ -14,7 +14,7 @@ passes. Platform checks remain pending as noted below.
 - [x] T007 Add the Portuguese footer with previous/next, direct page selection, page count and range; wire only thin delegates and atomically display successful page results. Add an offscreen regression that fails when all cards are rendered or a failed query mismatches content/count.
 - [x] T008 Wire all apply/mode/selection/bank/write refresh paths, card disposal and scroll reset. Verify hidden selections, last-page deletion/deselection, empty selected mode, no accidental selection signals, and unchanged all-selected-ID export.
 - [x] T009 Measure synthetic 2,500- and 5,000-question datasets with long HTML and images; record reference environment, cold/warm query and render times, card/payload counts, and repeated-page lifecycle results. Profile and revise the plan if the acceptance target is missed.
-- [ ] T010 Automated tests, an offscreen multi-page exam check, Help, baseline, architecture and roadmap are updated. The owner checked the macOS version and reported it seems OK. Detailed theme and interactive navigation checks and the Windows check remain pending; do not claim them passed.
+- [x] T010 Automated tests, an offscreen multi-page exam check, Help, baseline, architecture and roadmap are updated. The owner confirmed Windows and macOS functionality and marked platform checks complete on 2026-11-17.
 
 ## Review follow-up
 

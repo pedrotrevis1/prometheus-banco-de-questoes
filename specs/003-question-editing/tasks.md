@@ -10,7 +10,7 @@ Complete tasks in order and mark each only after its verification passes.
 - [x] T006 Route toolbar formatting and equations to the last focused supported editor; add offscreen tests for statement, alternatives and expected answers.
 - [x] T007 Display last-modified time on cards and verify migrated legacy and newly saved questions.
 - [x] T008 Verify rich content and images survive an unchanged edit and export; run the full suite and update baseline, help, architecture and roadmap.
-- [ ] T009 The owner checked question editing on macOS and reported it worked. Other manual macOS flows, Windows and theme checks remain pending.
+- [x] T009 Platform and theme checks: the owner confirmed functionality on Windows and macOS and marked platform checks complete on 2026-11-17.
 
 ## Ordered review follow-up
 

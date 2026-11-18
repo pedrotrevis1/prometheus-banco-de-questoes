@@ -1,6 +1,6 @@
 # Search tab fixes: handoff for implementation agents
 
-**Prepared**: 2026-11-16 | **Status**: 007–009 implementations in progress; platform checks pending
+**Prepared**: 2026-11-16 | **Status**: 007–009 implemented; platform checks complete per owner on 2026-11-17
 
 Start here when continuing the owner's three reported problems in "Buscar e
 Selecionar Questões". Read `AGENTS.md`, [constitution.md](constitution.md),
@@ -17,8 +17,8 @@ year (`ano_origem`), not school year (`ano_sugerido`).
 
 Pagination state transitions, invalid-year handling and resize constraints
 below describe the draft acceptance rules. Pagination is implemented and has
-synthetic offscreen measurements; platform verification remains pending.
-Source-year ranges and the reproduced preview-resize issue are implemented; platform checks remain pending.
+synthetic offscreen measurements. Source-year ranges and the reproduced
+preview-resize issue are implemented; the owner marked platform checks complete.
 
 ## Documents and sequence
 
@@ -29,8 +29,8 @@ Source-year ranges and the reproduced preview-resize issue are implemented; plat
 | 2 | Replace exact source year with inclusive optional bounds | [008 spec](../specs/008-source-year-range/spec.md), [plan](../specs/008-source-year-range/plan.md), [tasks](../specs/008-source-year-range/tasks.md) |
 | 3 | Reproduce and fix preview resize instability | [009 spec](../specs/009-preview-resize/spec.md), [plan](../specs/009-preview-resize/plan.md), [tasks](../specs/009-preview-resize/tasks.md) |
 
-This sequence follows the merged 001/002 implementation; Windows verification
-and release work remain pending. The code is now in the `prometheus/` package
+This sequence follows the merged 001/002 implementation; release work remains
+pending. The code is now in the `prometheus/` package
 and has an automated test suite. The owner chose to retain bulk deletion using the global selection, including
 questions hidden by filters or pages. The help text should make that clear.
 

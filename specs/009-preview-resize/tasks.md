@@ -11,5 +11,5 @@ Do tasks in order, one at a time; mark only after validation. The owner confirme
 - [x] T005 Add failing policy tests for drag origin, minimum/viewport cap, compact/expanded/manual precedence, repeated notifications and external viewport shrink; implement the spec's policy and pass them.
 - [x] T006 Apply the smallest evidence-backed layout/event fix, including idempotent auto-fit, manual precedence and drag cleanup; make T003 pass without freezing the main-window size or changing rich content.
 - [x] T007 Run offscreen scenarios for 1/50 cards, short/long/image content, inner/outer scrollbar transitions, outside release, page disposal and shared registration/tree handles; run applicable 007/008 regressions.
-- [ ] T008 Manually verify the reported symptom on Windows/macOS and light/dark themes with repeated drags and window resizing; record actual coverage and root-cause evidence rather than inferring platform success.
+- [x] T008 Platform verification: the owner confirmed Windows and macOS functionality and marked platform checks complete on 2026-11-17. Root-cause evidence is recorded in reproduction.md.
 - [x] T009 Update BL-042, KD-19, architecture and roadmap to the behavior delivered; document test results, reproduction and any remaining limitation for the next chat.

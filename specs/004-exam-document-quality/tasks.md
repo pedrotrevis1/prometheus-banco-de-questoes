@@ -10,11 +10,11 @@ Work in order; mark each task only when its verification passes.
 - [x] T006 Extract and test DOCX construction: chosen order, numbered versions, matching answer keys, page numbers, separate answer file and no school header.
 - [x] T007 Wire generation UI for question order, preflight, distinct versions and separate keys; ensure overwrite confirmation and partial-failure reporting.
 - [x] T008 Verify integrated output, edit/duplicate/selection and existing regressions; update help, baseline, architecture and roadmap.
-- [ ] T009 Manual macOS, Windows and Word checks remain pending; automated tests use synthetic content and offscreen Qt.
+- [x] T009 The owner confirmed Windows and macOS functionality and verified exported files in Word on 2026-11-17. Tables can look unusual in exports; the owner suspects the question formatting in the database, but the cause has not been verified.
 
 ## Ordered review follow-up
 
 - [x] R001 Reproduce and fix exact pasted image source replacement, including clipboard-to-DOCX regression.
 - [x] R002 Reproduce and fix visually identical version detection, including publication and answer-key checks.
 - [x] R003 Reproduce and fix stored image height handling and proportional sizing, using the owner's width-precedence decision.
-- [x] R004 Update baseline and run the complete suite; record remaining visual and platform checks. The suite passed 237 tests; macOS Quick Look rendered a synthetic exam and separate key for visual inspection. Interactive Word and Windows checks remain pending (T009).
+- [x] R004 Update baseline and run the complete suite; record visual and platform checks. The suite passed 237 tests; macOS Quick Look rendered a synthetic exam and separate key for visual inspection. The owner subsequently verified exported files in Word (T009).
