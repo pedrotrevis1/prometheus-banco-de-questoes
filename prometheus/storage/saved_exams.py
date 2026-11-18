@@ -156,3 +156,15 @@ def containing_exams(conn, question_ids):
     ids = set(question_ids)
     return [(exam_id, name) for exam_id, name, question_id in conn.execute('''SELECT e.id,e.name,q.question_id
         FROM saved_exams e JOIN saved_exam_questions q ON q.exam_id=e.id ORDER BY e.name''') if question_id in ids]
+
+
+def question_usage_counts(conn, question_ids):
+    """Count recorded generations for only the requested question IDs."""
+    counts = dict.fromkeys(question_ids, 0)
+    if not counts:
+        return counts
+    placeholders = ','.join('?' for _ in counts)
+    rows = conn.execute(f'''SELECT question_id, count(*) FROM exam_usage_questions
+        WHERE question_id IN ({placeholders}) GROUP BY question_id''', tuple(counts))
+    counts.update(rows)
+    return counts

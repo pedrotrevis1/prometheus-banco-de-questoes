@@ -75,7 +75,11 @@ def test_usage_filter_card_and_delete_warning(window, monkeypatch):
     saved_exams.record_generation(window.conn, exam_id, [[]], [1], used_at='2026-05-10')
     window.show_filtered_questions()
     card = window.scroll_layout.itemAt(0).widget()
-    assert 'História — Sem turma — 10/05/2026' in card.findChild(type(window.lbl_selected_count)).text()
+    assert card.usage_control.text() == 'Usos: 1'
+    card.usage_popup.activate()
+    from PySide6.QtWidgets import QLabel
+    assert card.usage_popup.findChild(QLabel, 'UsageEntry').text() == 'História — Sem turma — 10/05/2026'
+    card.usage_popup.close_history()
     window.cb_usage_filter.setCurrentIndex(window.cb_usage_filter.findData('never'))
     window.show_filtered_questions()
     assert 'Nenhuma' in window.lbl_result_range.text()
@@ -280,3 +284,248 @@ def test_successful_intentional_version_change_replaces_arrangements(window, mon
     assert new != old
     assert saved_exams.matching_versions(window.conn, exam_id) == new
     assert len(saved_exams.question_usages(window.conn, 1)) == 2
+
+
+def test_page_usage_counts_are_bulk_and_details_deferred(window, monkeypatch):
+    exam_id = saved_exams.save_exam(window.conn, 'Prova', None, {}, [1])
+    saved_exams.record_generation(window.conn, exam_id, [[]], [1], used_at='2026-01-01')
+    calls = []
+    original_counts = saved_exams.question_usage_counts
+    original_details = saved_exams.question_usages
+    monkeypatch.setattr(saved_exams, 'question_usage_counts', lambda conn, ids: (calls.append(('counts', tuple(ids))), original_counts(conn, ids))[1])
+    monkeypatch.setattr(saved_exams, 'question_usages', lambda conn, qid: (calls.append(('details', qid)), original_details(conn, qid))[1])
+    window.show_filtered_questions()
+    assert calls == [('counts', (1,))]
+    card = window.scroll_layout.itemAt(0).widget()
+    assert card.usage_count == 1
+    assert card.history_request() == [('Prova', '', '2026-01-01')]
+    assert calls[-1] == ('details', 1)
+
+
+def test_compact_card_has_labeled_metadata_and_stacked_actions(window):
+    from PySide6.QtWidgets import QLabel
+    from PySide6.QtCore import Qt
+    window.show_filtered_questions()
+    card = window.scroll_layout.itemAt(0).widget()
+    assert card.findChild(QLabel, 'CardIdentifier').text() == 'Questão #1'
+    assert card.checkbox.parentWidget() is card.btn_edit.parentWidget()
+    assert card.action_layout.indexOf(card.checkbox) < card.action_layout.indexOf(card.btn_edit) < card.action_layout.indexOf(card.btn_duplicate)
+    assert card.findChild(QLabel, 'CardSubject').textFormat() == Qt.RichText  # rich labels, escaped data
+
+
+def test_usage_popup_loads_on_request_retries_and_is_bounded(window, monkeypatch):
+    from PySide6.QtWidgets import QLabel
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    exam_id = saved_exams.save_exam(window.conn, 'Prova <especial>', None, {}, [1])
+    saved_exams.record_generation(window.conn, exam_id, [[]], [1], used_at='2026-05-10')
+    attempts = []
+    original = saved_exams.question_usages
+    def read(conn, qid):
+        attempts.append(qid)
+        if len(attempts) == 1:
+            raise RuntimeError('synthetic failure')
+        return original(conn, qid)
+    monkeypatch.setattr(saved_exams, 'question_usages', read)
+    window.show_filtered_questions()
+    window.show()
+    QApplication.processEvents()
+    card = window.scroll_layout.itemAt(0).widget()
+    assert card.usage_control.text() == 'Usos: 1'
+    assert attempts == []
+    card.usage_popup.activate()
+    assert 'Não foi possível carregar' in card.usage_popup.findChild(QLabel, 'UsageEntry').text()
+    card.usage_popup.close_history()
+    card.usage_popup.activate()
+    assert card.usage_popup.findChild(QLabel, 'UsageEntry').text() == 'Prova <especial> — Sem turma — 10/05/2026'
+    screen = QApplication.screenAt(card.usage_popup.geometry().center()) or QApplication.primaryScreen()
+    assert screen.availableGeometry().contains(card.usage_popup.geometry())
+    QTest.keyClick(card.usage_popup, Qt.Key_Escape)
+    assert not card.usage_popup.isVisible()
+    QTest.keyClick(card.usage_control, Qt.Key_Return)
+    assert card.usage_popup.isVisible() and card.usage_popup.activated
+    card.usage_popup.close_history()
+    assert attempts == [1, 1, 1]
+
+
+def test_zero_and_unavailable_popup_do_not_read(window, monkeypatch):
+    from PySide6.QtWidgets import QLabel
+    from prometheus.app import QuestionCard
+    window.show_filtered_questions()
+    card = window.scroll_layout.itemAt(0).widget()
+    card.history_request = lambda: (_ for _ in ()).throw(AssertionError('unexpected read'))
+    card.usage_popup.request = card.history_request
+    card.usage_popup.activate()
+    assert card.usage_popup.findChild(QLabel, 'UsageEntry').text() == 'Nenhum uso registrado.'
+    card.usage_popup.close_history()
+    legacy = QuestionCard(2, '', '', '', '', '', False, lambda *args: None)
+    legacy.usage_popup.activate()
+    assert legacy.usage_control.text() == 'Usos: não disponível'
+    assert 'não disponível' in legacy.usage_popup.findChild(QLabel, 'UsageEntry').text()
+    legacy.usage_popup.close_history()
+    legacy.deleteLater()
+
+
+def test_long_usage_popup_scroll_keyboard_and_disposal(window):
+    from PySide6.QtCore import QCoreApplication, QEvent, Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QLabel
+    exam_id = saved_exams.save_exam(window.conn, 'Prova extensa ' + 'x' * 150, None, {}, [1])
+    for i in range(100):
+        saved_exams.record_generation(window.conn, exam_id, [[]], [1], used_at=f'2026-01-{i % 28 + 1:02d}')
+    window.show_filtered_questions()
+    window.show()
+    for _ in range(4): QApplication.processEvents()
+    card = window.scroll_layout.itemAt(0).widget()
+    assert card.usage_control.text() == 'Usos: 100'
+    card.usage_control.setFocus()
+    QTest.keyClick(card.usage_control, Qt.Key_Space)
+    for _ in range(4): QApplication.processEvents()
+    popup = card.usage_popup
+    assert popup.isVisible() and popup.activated
+    assert len(popup.findChildren(QLabel, 'UsageEntry')) == 100
+    bar = popup.scroll.verticalScrollBar()
+    assert bar.maximum() > 0
+    QTest.keyClick(popup, Qt.Key_End)
+    assert bar.value() == bar.maximum()
+    QTest.keyClick(popup, Qt.Key_Home)
+    assert bar.value() == 0
+    window.show_filtered_questions()
+    assert not popup.isVisible()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    QApplication.processEvents()
+
+
+def test_usage_hover_and_outside_click(window):
+    from PySide6.QtCore import QEvent
+    window.show_filtered_questions()
+    window.show()
+    QApplication.processEvents()
+    card = window.scroll_layout.itemAt(0).widget()
+    QApplication.sendEvent(card.usage_control, QEvent(QEvent.Enter))
+    assert card.usage_popup.isVisible() and not card.usage_popup.activated
+    card.usage_popup.activate()
+    assert card.usage_popup.activated
+    from PySide6.QtTest import QTest
+    from PySide6.QtCore import Qt
+    QTest.mouseClick(window.lbl_result_range, Qt.LeftButton)
+    assert not card.usage_popup.isVisible()
+
+
+def test_aggregate_error_keeps_previous_cards(window, monkeypatch):
+    window.show_filtered_questions()
+    old = window.scroll_layout.itemAt(0).widget()
+    alerts = []
+    monkeypatch.setattr(window, 'show_alert', lambda *args: alerts.append(args))
+    def fail(*args):
+        raise RuntimeError('synthetic failure')
+    monkeypatch.setattr(saved_exams, 'question_usage_counts', fail)
+    assert not window.load_questions()
+    assert window.scroll_layout.itemAt(0).widget() is old
+    assert alerts and 'synthetic failure' in alerts[-1][1]
+
+
+def test_switching_bank_disposes_open_popup(window):
+    exam = saved_exams.save_exam(window.conn, 'Primeiro banco', None, {}, [1])
+    saved_exams.record_generation(window.conn, exam, [[]], [1])
+    window.show_filtered_questions()
+    card = window.scroll_layout.itemAt(0).widget()
+    card.usage_popup.activate()
+    assert card.usage_popup.isVisible()
+    previous = window.conn
+    other = sqlite3.connect(':memory:')
+    other.execute('BEGIN')
+    for migration in MIGRATIONS:
+        migration(other)
+    window.conn = other
+    try:
+        assert window.load_questions()
+        assert not card.usage_popup.isVisible()
+        assert window.scroll_layout.count() == 0
+    finally:
+        window.conn = previous
+        other.close()
+
+
+def test_usage_count_refreshes_after_generation_and_deletion(window, monkeypatch, tmp_path):
+    from PySide6.QtWidgets import QFileDialog
+    monkeypatch.setattr(window, 'get_text_prompt', lambda *args: 'Prova')
+    monkeypatch.setattr(window, 'show_confirm', lambda *args: True)
+    monkeypatch.setattr(QFileDialog, 'getSaveFileName', lambda *args, **kwargs: (str(tmp_path / 'exam.docx'), ''))
+    window.selected_ids.add(1)
+    window.show_filtered_questions()
+    assert window.scroll_layout.itemAt(0).widget().usage_control.text() == 'Usos: 0'
+    window.generate_word_doc()
+    assert window.scroll_layout.itemAt(0).widget().usage_control.text() == 'Usos: 1'
+    window.delete_saved_exam()
+    assert window.scroll_layout.itemAt(0).widget().usage_control.text() == 'Usos: 0'
+
+
+def test_card_layout_header_count_and_literal_values(qt_app=None):
+    from PySide6.QtWidgets import QApplication, QLabel, QBoxLayout
+    from PySide6.QtGui import QTextDocument
+    from prometheus.app import QuestionCard
+    app = QApplication.instance() or QApplication([])
+    heights = []
+    for count in (2, 1000):
+        card = QuestionCard(1, 'A < B & "C"', 'Médio', 'Médio', 'Dissertativa', '<p>Curto</p>', False,
+                            lambda *args: None, question_source='X < Y & Z', usage_count=count)
+        card.resize(640, 300)
+        card.show()
+        for _ in range(5): app.processEvents()
+        heights.append(card.header_layout.geometry().height())
+        for name, value in [('CardSubject', 'A < B & "C"'), ('CardSource', 'X < Y & Z')]:
+            document = QTextDocument()
+            document.setHtml(card.findChild(QLabel, name).text())
+            assert value in document.toPlainText()
+        card.resize(300, 500)
+        for _ in range(5): app.processEvents()
+        assert card.header_layout.direction() == QBoxLayout.TopToBottom
+        card.close()
+    assert heights[0] == heights[1]
+
+
+def test_unbroken_metadata_and_history_stay_within_available_width():
+    from prometheus.app import QuestionCard
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])
+    card = QuestionCard(1, 'A' * 300, 'Médio', 'Médio', 'Dissertativa', '<p>Curto</p>', False,
+                        lambda *args: None, question_source='B' * 300, usage_count=1,
+                        history_request=lambda: [('C' * 500, 'D' * 500, '2026-01-01')])
+    card.resize(640, 300)
+    card.show()
+    for _ in range(5): app.processEvents()
+    assert card.width() == 640
+    card.usage_popup.activate()
+    for _ in range(5): app.processEvents()
+    assert card.usage_popup.scroll.horizontalScrollBar().maximum() == 0
+    assert card.usage_popup.scroll.verticalScrollBar().maximum() > 0
+    card.usage_popup.close_history()
+    card.close()
+
+
+def test_card_usage_and_popup_follow_theme_and_metadata_stays_green(window):
+    from PySide6.QtGui import QColor, QPalette
+    from PySide6.QtWidgets import QLabel
+    window.show_filtered_questions()
+    window.show()
+    QApplication.processEvents()
+    card = window.scroll_layout.itemAt(0).widget()
+    window.is_dark_mode = True
+    window.apply_theme()
+    card.usage_popup.activate()
+    QApplication.processEvents()
+    assert card.usage_control.palette().color(QPalette.Button) == QColor('#313244')
+    assert card.usage_popup.content.palette().color(QPalette.Window) == QColor('#252538')
+    assert card.metadata_widget.palette().color(QPalette.Window) == QColor('#294338')
+    assert card.findChild(QLabel, 'CardIdentifier').palette().color(QPalette.WindowText) == QColor('#E2E8F0')
+    card.usage_popup.close_history()
+    window.show_filtered_questions()
+    card = window.scroll_layout.itemAt(0).widget()
+    assert card.metadata_widget.palette().color(QPalette.Window) == QColor('#294338')
+    window.is_dark_mode = False
+    window.apply_theme()
+    QApplication.processEvents()
+    assert card.usage_control.palette().color(QPalette.Button) == QColor('#FFFFFF')
+    assert card.metadata_widget.palette().color(QPalette.Window) == QColor('#DCFCE7')
+    assert card.findChild(QLabel, 'CardIdentifier').palette().color(QPalette.WindowText) == QColor('#183D2B')

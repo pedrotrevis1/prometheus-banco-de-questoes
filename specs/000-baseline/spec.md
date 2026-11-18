@@ -120,7 +120,10 @@ Data structures are in [data-model.md](data-model.md).
   the result viewport and survives document reflow; toggling resets the fit.
   Card layouts enclose resized previews and reflow later cards. The owner
   confirmed all 010 acceptance scenarios were checked.
-  Cards also list the exam, class and date of each recorded use. Search can
+  Metadata uses light green in light mode and the app’s dark green in dark mode;
+  usage history follows the active theme.
+  Cards show the number of recorded generations; a scrollable on-demand popup
+  shows each use’s exam, class and date. Search can
   restrict results to never-used questions or questions not used on or after
   a chosen date.
 - **BL-043** Each card has a "Selecionar" checkbox. A counter shows how many
@@ -187,6 +190,8 @@ Data structures are in [data-model.md](data-model.md).
 | KD-03 | The delete action applies to the exam selection, including questions hidden by the current filter | Retained by owner decision |
 | KD-17 | Tables and lists in pasted content are flattened in the exam | Backlog |
 | KD-20 | Dragging a question-preview handle changes its scrollbar but can leave the enlarged preview clipped by its card, with the next card almost stationary; owner recording reviewed 2026-11-18; reproduced and fixed in synthetic source tests | [010: preview-visible-resize](../010-preview-visible-resize/spec.md), resolved; owner confirmed all scenarios checked |
+| KD-21 | Compact card layout and on-demand usage history are implemented; the owner accepted closure with unperformed native checks documented. | [011: compact-question-cards](../011-compact-question-cards/spec.md) |
+| KD-22 | Saved-exam controls have no explicit action to detach the current exam and begin a fresh empty selection; the owner reports restarting between exams (2026-11-18) | [012: new-exam-workflow](../012-new-exam-workflow/spec.md), Draft; not implemented |
 
 Planning note: spec 005 remains subject to owner verification using real banks
 and exported documents before release.

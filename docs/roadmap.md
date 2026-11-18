@@ -12,6 +12,12 @@ The owner reported a remaining preview-resize defect on 2026-11-18, supported
 by a screen recording. Spec 010 fixes the reported defect; the owner confirmed all scenarios checked
 and accepted the implementation.
 
+The owner requested plans for compact question cards and a fresh-exam action
+on 2026-11-18. Spec 011 is done; the owner accepted closure with the unperformed native checks documented.
+Spec 012 remains Draft and follows 011. The owner confirmed that "Nova prova" resets selection, class, generation
+options and filters, then returns to search. See the
+[implementation handoff](card-and-new-exam-workflow.md).
+
 | # | Spec | Goal | Depends on | Status |
 |---|---|---|---|---|
 | 000 | [baseline](../specs/000-baseline/spec.md) | Document the released v1.1 behavior | — | Done |
@@ -25,6 +31,8 @@ and accepted the implementation.
 | 008 | [source-year-range](../specs/008-source-year-range/spec.md) | Optional inclusive "Desde" / "até" source-year filtering without rewriting legacy values | 007 | Done |
 | 009 | [preview-resize](../specs/009-preview-resize/spec.md) | Reproduce and fix question-preview resizing without stretching the outer UI | 008 (execution sequence) | Done; visible-resize follow-up completed in 010 |
 | 010 | [preview-visible-resize](../specs/010-preview-visible-resize/spec.md) | Make preview growth visibly enlarge its card and reflow later cards without clipping | 009 implementation | Done; owner confirmed all scenarios checked |
+| 011 | [compact-question-cards](../specs/011-compact-question-cards/spec.md) | Readable metadata, stacked compact actions, usage count and on-demand history | 006, 007, 009/010 | Done; owner accepted remaining unperformed native checks |
+| 012 | [new-exam-workflow](../specs/012-new-exam-workflow/spec.md) | Start a fresh exam safely, resetting selection/options/filters without restarting | 006, 007/008; execute after 011 | Draft; full-reset preference confirmed, no implementation |
 
 ## Owner-requested search fixes (2026-11-16)
 
@@ -57,6 +65,10 @@ implemented, preserve these public contracts and adapt their query tests.
   exam output matters more to the owner.
 
 ## Planned release
+
+Spec 012 remains proposed follow-up work. No release version, build or
+publication is assigned by this planning change; existing v2.0.0 source
+preparation and remaining release checks retain their recorded scope.
 
 | Release | Contents |
 |---|---|
