@@ -1417,6 +1417,7 @@ class ExamGeneratorApp(QMainWindow):
     def show_help(self):
         help_text = """
         <h2>Guia rápido</h2>
+        <p>Use o botão <b>Menu</b> para abrir a barra lateral. Nela você pode alternar entre os temas claro e escuro, gerenciar disciplinas e bancos, fazer backups e consultar esta ajuda.</p>
         <h3>Backups e bancos não encontrados</h3>
         <p>Use <b>Fazer backup</b> no menu para salvar uma cópia do banco em outro local. Antes de atualizar a estrutura de um banco, o Prometheus faz uma cópia automática. Se for necessário excluir um backup antigo, o aplicativo pedirá confirmação.</p>
         <p>Se um banco tiver sido movido ou estiver indisponível, use <b>Localizar arquivo</b> para apontar para ele, ou <b>Remover da lista</b> para remover apenas a disciplina. O arquivo não é apagado.</p>
@@ -1426,7 +1427,8 @@ class ExamGeneratorApp(QMainWindow):
         <h3>2. Buscar e Selecionar Questões</h3>
         <p>Use os filtros de categoria, texto, fonte da questão, ano da fonte, dificuldade, ano/série escolar e tipo; depois clique em <b>Filtrar Questões</b>. A fonte pode ser buscada por parte do nome. Para o ano da fonte, use <b>Desde</b> para incluir esse ano e os seguintes, <b>até</b> para incluir esse ano e os anteriores, ou ambos para limitar o intervalo. Por exemplo: Desde 2022; até 2024; ou Desde 2022 até 2024. Use o mesmo ano nos dois campos para buscar um ano numérico exato. Deixe os campos vazios para buscar sem essas restrições. Abra os cartões para revisar enunciados, alternativas e respostas. Marque <b>Selecionar</b> nas questões que entrarão na prova. Os resultados aparecem em páginas de até 50 questões; use <b>Anterior</b>, <b>Próxima</b> ou o número da página para navegar. A seleção permanece ao trocar de página ou filtro. Use <b>Navegar pelas questões selecionadas</b> para ver apenas essas questões. A exclusão de questões selecionadas inclui também as seleções que não estão visíveis na página atual.</p>
         <h3>3. Configurar e Gerar Prova</h3>
-        <p>Depois de selecionar questões, use <b>Subir</b> e <b>Descer</b> para definir a ordem. Escolha se deseja incluir o gabarito ao final ou em arquivo separado. Para versões diferentes, ative <b>Gerar múltiplas versões</b> e escolha o embaralhamento. Questões marcadas para manter a ordem não têm suas alternativas embaralhadas. As versões recebem números e arquivos com <b>_Versao_</b> no nome. Se alguma imagem não puder ser exportada, o aplicativo informa a questão antes de salvar. Os arquivos não incluem cabeçalho escolar: copie as questões para o modelo da escola.</p>
+        <p>Depois de selecionar questões, use <b>Subir</b> e <b>Descer</b> para definir a ordem. Escolha a turma e as opções de gabarito. Para versões diferentes, ative <b>Gerar múltiplas versões</b> e escolha o embaralhamento. Questões marcadas para manter a ordem não têm suas alternativas embaralhadas. As versões recebem números e arquivos com <b>_Versao_</b> no nome. Se alguma imagem não puder ser exportada, o aplicativo informa a questão antes de salvar. Os arquivos não incluem cabeçalho escolar: copie as questões para o modelo da escola.</p>
+        <p>Use <b>Salvar</b> para guardar a prova atual, <b>Salvar como</b> para criar outra e <b>Nova prova</b> para começar uma seleção independente. O aplicativo pede confirmação antes de descartar alterações não salvas. Provas salvas podem ser reabertas, renomeadas, duplicadas ou excluídas.</p>
         """
         dialog = QDialog(self)
         dialog.setObjectName("HelpDialog")
@@ -1471,14 +1473,33 @@ class ExamGeneratorApp(QMainWindow):
         donate_button.clicked.connect(self.show_pix_qr)
         layout.addWidget(donate_button)
 
+        legal_text = QLabel(
+            "Aviso legal: este aplicativo é fornecido como uma ferramenta de apoio, "
+            "sem garantia de disponibilidade, adequação a uma finalidade específica "
+            "ou ausência de erros. O desenvolvedor não se responsabiliza pelo uso "
+            "do aplicativo, pelas decisões tomadas com base nele, nem por perdas, "
+            "danos ou consequências decorrentes de seu uso, na medida permitida pela "
+            "legislação aplicável. O usuário é integralmente responsável pelo conteúdo "
+            "que cadastra, importa, edita, compartilha ou exporta, incluindo perguntas, "
+            "respostas, imagens, direitos autorais, privacidade, correção pedagógica "
+            "e conformidade com as regras da sua instituição. O usuário deve revisar "
+            "todo o conteúdo e os arquivos gerados antes de utilizá-los ou distribuí-los "
+            "e manter seus próprios backups. Este aviso não substitui orientação jurídica."
+        )
+        legal_text.setObjectName("LegalNotice")
+        legal_text.setWordWrap(True)
+        layout.addWidget(legal_text)
+
         dialog.setStyleSheet(
             self.styleSheet()
             + (
                 "QDialog { background-color: #1E1E2E; color: #E2E8F0; }"
                 "QDialog QLabel { background-color: transparent; color: #E2E8F0; }"
+                "QLabel#LegalNotice { color: #A6ADC8; font-size: 10pt; }"
                 if self.is_dark_mode else
                 "QDialog { background-color: #F8FAFC; color: #334155; }"
                 "QDialog QLabel { background-color: transparent; color: #334155; }"
+                "QLabel#LegalNotice { color: #64748B; font-size: 10pt; }"
             )
         )
         dialog.exec()

@@ -840,6 +840,25 @@ def test_help_dialog_is_wide_resizable_and_scrollable(window, monkeypatch):
     dialog.close()
 
 
+def test_about_dialog_contains_readable_legal_notice(window, monkeypatch):
+    from PySide6.QtWidgets import QDialog, QLabel
+    captured = {}
+    original_exec = QDialog.exec
+
+    def capture_exec(dialog):
+        if dialog.windowTitle() == 'Sobre o Prometheus':
+            captured['dialog'] = dialog
+            return QDialog.Rejected
+        return original_exec(dialog)
+
+    monkeypatch.setattr(QDialog, 'exec', capture_exec)
+    window.show_about()
+    notice = captured['dialog'].findChild(QLabel, 'LegalNotice')
+    assert notice is not None and notice.wordWrap()
+    assert 'responsabiliza' in notice.text()
+    assert 'conteúdo que cadastra' in notice.text()
+
+
 def test_new_exam_save_failure_reading_existing_exam_preserves_draft(window, monkeypatch):
     from PySide6.QtWidgets import QMessageBox
     window.selected_ids.add(1)

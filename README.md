@@ -103,6 +103,13 @@ O executável é criado em `dist/Prometheus.exe`. O comando deve ser executado n
 Windows; o resultado precisa ser testado nesse sistema, incluindo o QR Code Pix
 em **Sobre**. O macOS também é uma plataforma oficialmente suportada.
 
+Os builds usam o ícone oficial em `icon/prometheus-icon-apple Exports/`. Ele é
+aplicado à janela em execução e ao artefato do sistema; no Windows, o build usa
+`icon/Prometheus.ico`. Para gerar o macOS, instale as dependências de
+`requirements-dev.txt` (o PyInstaller usa Pillow para converter o PNG para o
+formato de ícone do bundle) e execute `./build_macos.sh` em um Mac. O bundle
+usa o identificador `com.pedrotrevisan.prometheus`.
+
 O código está disponível com todos os direitos reservados; nenhuma licença de
 reutilização é concedida.
 

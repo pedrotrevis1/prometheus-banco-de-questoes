@@ -35,6 +35,8 @@ options and filters, then returns to search. See the
 | 012 | [new-exam-workflow](../specs/012-new-exam-workflow/spec.md) | Start a fresh exam safely, resetting selection/options/filters without restarting | 006, 007/008; execute after 011 | Done; visual acceptance confirmed by owner |
 | 013 | [dark-theme-consistency](../specs/013-dark-theme-consistency/spec.md) | Keep generate surfaces and filter popups consistent in dark mode | 012 | Implemented |
 | 014 | [help-dialog-layout](../specs/014-help-dialog-layout/spec.md) | Make the Ajuda guide wide, resizable and scrollable | 013 | Implemented |
+| 015 | [help-and-legal-copy](../specs/015-help-and-legal-copy/spec.md) | Refresh help guidance and add legal fine print to Sobre | 014 | Implemented |
+| 016 | [official-app-icon](../specs/016-official-app-icon/spec.md) | Use the supplied official icon in runtime and packaged artifacts | 015 | Implemented |
 
 ## Owner-requested search fixes (2026-11-16)
 

@@ -26,7 +26,11 @@ Data structures are in [data-model.md](data-model.md).
   the "Uso em provas" filter popup.
 - **BL-005** "Sobre" shows authorship text and a button that displays a Pix
   donation QR code. "Ajuda" opens a wide, resizable dialog with scrollable
-  rich-text guidance and a close button.
+  rich-text guidance and a close button. "Sobre" also shows a readable legal
+  notice below the donation button describing user responsibility for content
+  and use of the application.
+- **BL-006** The application uses the official icon supplied under `icon/` for
+  its runtime windows and packaged Windows/macOS artifacts.
 
 ## Disciplines and question banks
 
