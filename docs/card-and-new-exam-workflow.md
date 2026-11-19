@@ -70,7 +70,7 @@ The original documentation change created the specs and handoff. Spec 011 has si
 > docs/roadmap.md, docs/glossary.md and the applicable spec/plan/tasks first.
 > Begin with spec 011's next unchecked task, then implement 012 sequentially.
 > Revalidate checkout/prerequisites. Work one task at a time in order; tick it
-> only after its tests/checks pass. Honor 012's owner-confirmed full reset.
+> only after its targeted tests/checks pass. Honor 012's owner-confirmed full reset.
 > Ask about newly discovered ambiguity; never guess clarification-marker answers.
 > Keep new logic in domain/storage/export with tests and thin Qt adapters;
 > preserve 009/010 preview behavior. Use isolated synthetic/in-memory fixtures,

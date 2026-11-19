@@ -783,7 +783,7 @@ def test_new_exam_does_not_reuse_shuffled_arrangements(window, monkeypatch, tmp_
 
 
 def test_management_panel_fits_and_tracks_theme(window):
-    from PySide6.QtWidgets import QFrame, QPushButton
+    from PySide6.QtWidgets import QFrame, QPushButton, QScrollArea
     from PySide6.QtGui import QColor, QPalette
     window.resize(1250, 850)
     window.tabs.setCurrentIndex(2)
@@ -798,6 +798,46 @@ def test_management_panel_fits_and_tracks_theme(window):
     window.apply_theme()
     QApplication.processEvents()
     assert panel.palette().color(QPalette.Window) == QColor('#252538')
+    generation_content = next(
+        area.widget() for area in window.findChildren(QScrollArea)
+        if area.widget() and area.widget().objectName() == 'GenerationScrollContent'
+    )
+    assert generation_content.objectName() == 'GenerationScrollContent'
+    assert generation_content.palette().color(QPalette.Window) == QColor('#1E1E2E')
+
+
+def test_usage_filter_popup_follows_dark_theme(window):
+    from PySide6.QtGui import QColor, QPalette
+    window.is_dark_mode = True
+    window.apply_theme()
+    popup = window.cb_usage_filter.view().parentWidget()
+    assert popup.objectName() == 'ComboPopupContainer'
+    assert popup.palette().color(QPalette.Window) == QColor('#313244')
+    assert window.date_usage_filter.palette().color(QPalette.Base) == QColor('#313244')
+
+
+def test_help_dialog_is_wide_resizable_and_scrollable(window, monkeypatch):
+    from PySide6.QtWidgets import QDialog, QTextBrowser
+    captured = {}
+
+    original_exec = QDialog.exec
+    def capture_exec(dialog):
+        if dialog.objectName() == 'HelpDialog':
+            captured['dialog'] = dialog
+            return QDialog.Rejected
+        return original_exec(dialog)
+
+    monkeypatch.setattr(QDialog, 'exec', capture_exec)
+    window.show_help()
+    dialog = captured['dialog']
+    browser = dialog.findChild(QTextBrowser, 'HelpContent')
+    assert dialog.minimumWidth() >= 720
+    assert dialog.isSizeGripEnabled()
+    assert browser is not None and browser.isReadOnly()
+    dialog.show()
+    QApplication.processEvents()
+    assert browser.verticalScrollBar().maximum() > 0
+    dialog.close()
 
 
 def test_new_exam_save_failure_reading_existing_exam_preserves_draft(window, monkeypatch):

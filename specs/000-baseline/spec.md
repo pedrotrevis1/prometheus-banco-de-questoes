@@ -21,9 +21,12 @@ Data structures are in [data-model.md](data-model.md).
   discipline management, the theme toggle, "Ajuda" and "Sobre".
 - **BL-003** The window title shows the app name and the bank file name.
 - **BL-004** Light theme is the default; a button toggles dark mode. The choice
-  is not remembered between sessions.
+  is not remembered between sessions. All application surfaces and combo
+  popups follow the active theme, including the generate-tab scroll content and
+  the "Uso em provas" filter popup.
 - **BL-005** "Sobre" shows authorship text and a button that displays a Pix
-  donation QR code.
+  donation QR code. "Ajuda" opens a wide, resizable dialog with scrollable
+  rich-text guidance and a close button.
 
 ## Disciplines and question banks
 

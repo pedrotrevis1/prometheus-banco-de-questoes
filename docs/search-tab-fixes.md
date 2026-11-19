@@ -113,4 +113,4 @@ share the search controller, query path and preview widgets.
 - [x] Record the owner's page-size and affected-widget answers.
 - [x] Prepare three Draft specs with plans, ordered tasks and regression criteria.
 - [x] Reconcile prerequisites and owner decisions; 007 implementation is in progress.
-- [ ] Run automated tests, GUI checks and performance measurements during implementation.
+- [ ] Run targeted automated tests for changed behavior, plus applicable GUI checks and performance measurements during implementation.

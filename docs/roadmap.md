@@ -33,6 +33,8 @@ options and filters, then returns to search. See the
 | 010 | [preview-visible-resize](../specs/010-preview-visible-resize/spec.md) | Make preview growth visibly enlarge its card and reflow later cards without clipping | 009 implementation | Done; owner confirmed all scenarios checked |
 | 011 | [compact-question-cards](../specs/011-compact-question-cards/spec.md) | Readable metadata, stacked compact actions, usage count and on-demand history | 006, 007, 009/010 | Done; owner accepted remaining unperformed native checks |
 | 012 | [new-exam-workflow](../specs/012-new-exam-workflow/spec.md) | Start a fresh exam safely, resetting selection/options/filters without restarting | 006, 007/008; execute after 011 | Done; visual acceptance confirmed by owner |
+| 013 | [dark-theme-consistency](../specs/013-dark-theme-consistency/spec.md) | Keep generate surfaces and filter popups consistent in dark mode | 012 | Implemented |
+| 014 | [help-dialog-layout](../specs/014-help-dialog-layout/spec.md) | Make the Ajuda guide wide, resizable and scrollable | 013 | Implemented |
 
 ## Owner-requested search fixes (2026-11-16)
 

@@ -1,6 +1,6 @@
 # Prometheus Constitution
 
-**Version**: 1.0.0 | **Ratified**: 2026-11-14 | **Status**: Proposed (awaiting project owner approval)
+**Version**: 1.1.0 | **Ratified**: 2026-11-14 | **Status**: Proposed (awaiting project owner approval)
 
 This document holds the non-negotiable rules of the project. Every spec, plan,
 task and code change must comply with it. When a spec and the constitution
@@ -83,7 +83,7 @@ A printed exam with a missing image or a wrong answer key harms students.
 | Export | python-docx, `.docx` output |
 | Packaging | PyInstaller single-file executable |
 | Platforms | Windows is the primary target; macOS must keep working |
-| Tests | pytest; the suite must pass before any merge to `main` |
+| Tests | pytest; targeted tests covering the changed behavior and its regressions must pass before finalizing or merging to `main` |
 | Versioning | Semantic versioning, git tags (`v1.2.0`); the version is defined in one place in code |
 
 ## Development workflow
@@ -94,13 +94,17 @@ A printed exam with a missing image or a wrong answer key harms students.
    The plan includes a constitution check.
 4. Implement on a branch named after the spec folder (e.g. `002-data-safety`),
    one task at a time, tests alongside.
-5. Verify every acceptance scenario, update the baseline spec and the roadmap,
-   then merge and tag.
+5. Verify every acceptance scenario with targeted automated tests for the
+   changed behavior and its regressions, update the baseline spec and roadmap,
+   then merge and tag. A full-suite run is optional and may be used when its
+   additional confidence justifies the time.
 
 ## Governance
 
 - The project owner approves amendments. An amendment changes this file, bumps
-  its version and states the reason in the commit message.
+  its version and states the reason in the commit message. Version 1.1.0
+  changes verification from a mandatory full-suite run to targeted tests so
+  feature delivery remains practical while preserving regression coverage.
 - Reviews (human or AI) check constitution compliance before anything else.
 - A justified exception is recorded in the plan under "Complexity tracking",
   with the simpler alternative that was rejected and why.

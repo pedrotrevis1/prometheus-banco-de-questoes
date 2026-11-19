@@ -52,7 +52,7 @@ import platform  # <--- Este é o import que estava faltando
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QFileDialog, QTabWidget,
-    QComboBox, QTextEdit, QCheckBox, QMessageBox, QScrollArea,
+    QComboBox, QTextEdit, QTextBrowser, QCheckBox, QMessageBox, QScrollArea,
     QFrame, QButtonGroup, QSizePolicy, QStyledItemDelegate, QListView,
     QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator, QListWidget, QDialog, QFormLayout, QToolButton, QInputDialog,
     QRadioButton, QGridLayout, QProxyStyle, QStyle, QHeaderView, QStyleFactory, QSpinBox, QDateEdit,
@@ -94,12 +94,12 @@ QLabel { background-color: transparent; color: #E2E8F0; font-weight: 500; }
 #FilterSectionDivider { background-color: #45475A; min-height: 3px; max-height: 3px; border: none; }
 #FilterHeaderLabel { background-color: #294338; color: #A7F3D0; font-weight: bold; border-radius: 5px; padding: 5px; }
 #GenerationOptionsPanel, #ExamManagementPanel { background-color: #252538; border: 1px solid #45475A; border-radius: 10px; }
-#RegisterScrollContent, #SearchFilterContent, #QuestionResultsContent { background-color: #1E1E2E; }
+#RegisterScrollContent, #SearchFilterContent, #QuestionResultsContent, #GenerationScrollContent { background-color: #1E1E2E; }
 #GenerationSectionTitle { font-size: 16px; font-weight: bold; color: #E2E8F0; }
-QLineEdit, QTextEdit, QComboBox { background-color: #313244; border: 1px solid #45475A; border-radius: 6px; padding: 8px; color: #FFFFFF; }
+QLineEdit, QTextEdit, QComboBox, QDateEdit { background-color: #313244; border: 1px solid #45475A; border-radius: 6px; padding: 8px; color: #FFFFFF; }
 QSpinBox { background-color: #313244; border: 1px solid #45475A; border-radius: 6px; padding: 4px; color: #FFFFFF; }
 #QuestionPreview { border: 1px solid #45475A; border-radius: 6px; padding: 0px; }
-QLineEdit:focus, QTextEdit:focus, QComboBox:focus { border: 1px solid #10B981; }
+QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QDateEdit:focus { border: 1px solid #10B981; }
 QFrame#ComboPopupContainer { background-color: #313244; border: 1px solid #45475A; border-radius: 6px; }
 QComboBox QListView { background-color: #313244; color: #FFFFFF; border: none; padding: 4px; margin: 0px; min-width: 100px; }
 QComboBox QAbstractItemView { background-color: #313244; color: #FFFFFF; border: none; selection-background-color: #10B981; selection-color: #11111B; outline: none; }
@@ -156,12 +156,12 @@ QLabel { background-color: transparent; color: #334155; font-weight: 500; }
 #FilterSectionDivider { background-color: #CBD5E1; min-height: 3px; max-height: 3px; border: none; }
 #FilterHeaderLabel { background-color: #DCFCE7; color: #166534; font-weight: bold; border-radius: 5px; padding: 5px; }
 #GenerationOptionsPanel, #ExamManagementPanel { background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 10px; }
-#RegisterScrollContent, #SearchFilterContent, #QuestionResultsContent { background-color: #F8FAFC; }
+#RegisterScrollContent, #SearchFilterContent, #QuestionResultsContent, #GenerationScrollContent { background-color: #F8FAFC; }
 #GenerationSectionTitle { font-size: 16px; font-weight: bold; color: #334155; }
-QLineEdit, QTextEdit, QComboBox { background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 6px; padding: 8px; color: #0F172A; }
+QLineEdit, QTextEdit, QComboBox, QDateEdit { background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 6px; padding: 8px; color: #0F172A; }
 QSpinBox { background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 6px; padding: 4px; color: #0F172A; }
 #QuestionPreview { border: 1px solid #CBD5E1; border-radius: 6px; padding: 0px; }
-QLineEdit:focus, QTextEdit:focus, QComboBox:focus { border: 1px solid #059669; }
+QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QDateEdit:focus { border: 1px solid #059669; }
 QFrame#ComboPopupContainer { background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 6px; }
 QComboBox QListView { background-color: #FFFFFF; color: #0F172A; border: none; padding: 4px; margin: 0px; min-width: 100px; }
 QComboBox QAbstractItemView { background-color: #FFFFFF; color: #0F172A; border: none; selection-background-color: #059669; selection-color: #FFFFFF; outline: none; }
@@ -236,7 +236,7 @@ def windows_theme(base_theme, dark=False):
     #FilterHeaderLabel { background: %(tint)s; color: %(tint_text)s;
         font-size: 10pt; font-weight: 600; padding: 3px 8px; border-radius: 4px; }
     #FilterSectionDivider { min-height: 1px; max-height: 1px; background: %(border)s; }
-    QLineEdit, QComboBox, QSpinBox { background: %(surface)s; color: %(text)s;
+    QLineEdit, QComboBox, QDateEdit, QSpinBox { background: %(surface)s; color: %(text)s;
         border: 1px solid %(border)s; border-radius: 4px; padding: 4px 8px;
         min-height: 20px; selection-background-color: %(accent)s;
         selection-color: %(on_accent)s; }
@@ -244,9 +244,9 @@ def windows_theme(base_theme, dark=False):
         border-radius: 4px; padding: 6px; selection-background-color: %(accent)s;
         selection-color: %(on_accent)s; }
     QLineEdit, QTextEdit { placeholder-text-color: %(muted)s; }
-    QLineEdit:hover, QTextEdit:hover, QComboBox:hover, QSpinBox:hover { border-color: %(muted)s; }
-    QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QSpinBox:focus { border-color: %(accent)s; }
-    QLineEdit:disabled, QTextEdit:disabled, QComboBox:disabled, QSpinBox:disabled {
+    QLineEdit:hover, QTextEdit:hover, QComboBox:hover, QDateEdit:hover, QSpinBox:hover { border-color: %(muted)s; }
+    QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QDateEdit:focus, QSpinBox:focus { border-color: %(accent)s; }
+    QLineEdit:disabled, QTextEdit:disabled, QComboBox:disabled, QDateEdit:disabled, QSpinBox:disabled {
         background: %(bg)s; color: %(muted)s; border-color: %(border)s; }
     QComboBox { padding-right: 27px; }
     QComboBox::drop-down { subcontrol-origin: border; subcontrol-position: top right;
@@ -1245,6 +1245,20 @@ class ExamGeneratorApp(QMainWindow):
                 palette.setColor(QPalette.Disabled, role, QColor("#A6ADC8" if dark else "#64748B"))
             QApplication.instance().setPalette(palette)
         self.setStyleSheet(DARK_THEME if self.is_dark_mode else LIGHT_THEME)
+        # Native combo popups are separate windows and do not always inherit
+        # the application palette when the theme changes.
+        for popup in self.findChildren(QFrame, "ComboPopupContainer"):
+            popup_palette = popup.palette()
+            popup_surface = QColor("#313244" if self.is_dark_mode else "#FFFFFF")
+            popup_text = QColor("#FFFFFF" if self.is_dark_mode else "#0F172A")
+            popup_palette.setColor(QPalette.Window, popup_surface)
+            popup_palette.setColor(QPalette.Base, popup_surface)
+            popup_palette.setColor(QPalette.Text, popup_text)
+            popup_palette.setColor(QPalette.WindowText, popup_text)
+            popup.setPalette(popup_palette)
+            view = popup.findChild(QListView)
+            if view:
+                view.setPalette(popup_palette)
         for card in self.findChildren(QuestionCard):
             card.set_theme(self.is_dark_mode)
         # Refresh icon caches after a palette change (including existing cards).
@@ -1414,15 +1428,25 @@ class ExamGeneratorApp(QMainWindow):
         <h3>3. Configurar e Gerar Prova</h3>
         <p>Depois de selecionar questões, use <b>Subir</b> e <b>Descer</b> para definir a ordem. Escolha se deseja incluir o gabarito ao final ou em arquivo separado. Para versões diferentes, ative <b>Gerar múltiplas versões</b> e escolha o embaralhamento. Questões marcadas para manter a ordem não têm suas alternativas embaralhadas. As versões recebem números e arquivos com <b>_Versao_</b> no nome. Se alguma imagem não puder ser exportada, o aplicativo informa a questão antes de salvar. Os arquivos não incluem cabeçalho escolar: copie as questões para o modelo da escola.</p>
         """
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("Ajuda")
-        msg_box.setIcon(QMessageBox.Information)
-        msg_box.setTextFormat(Qt.RichText)
-        msg_box.setText(help_text)
-        msg_box.setMinimumWidth(620)
-        msg_box.addButton("Fechar", QMessageBox.AcceptRole)
-        msg_box.setStyleSheet(self.styleSheet())
-        msg_box.exec()
+        dialog = QDialog(self)
+        dialog.setObjectName("HelpDialog")
+        dialog.setWindowTitle("Ajuda")
+        dialog.setMinimumSize(720, 520)
+        dialog.resize(860, 680)
+        dialog.setSizeGripEnabled(True)
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(20, 18, 20, 16)
+        browser = QTextBrowser()
+        browser.setObjectName("HelpContent")
+        browser.setOpenExternalLinks(False)
+        browser.setHtml(help_text)
+        layout.addWidget(browser)
+        close_button = QPushButton("Fechar")
+        close_button.clicked.connect(dialog.accept)
+        layout.addWidget(close_button, 0, Qt.AlignRight)
+        dialog.setStyleSheet(self.styleSheet())
+        dialog.exec()
 
     def show_about(self):
         dialog = QDialog(self)
@@ -2836,6 +2860,7 @@ class ExamGeneratorApp(QMainWindow):
         self.date_usage_filter.setCalendarPopup(True)
         self.date_usage_filter.setDisplayFormat('dd/MM/yyyy')
         self.date_usage_filter.setEnabled(False)
+        configure_combo_popup(self.cb_usage_filter)
         self.cb_usage_filter.currentIndexChanged.connect(
             lambda: self.date_usage_filter.setEnabled(self.cb_usage_filter.currentData() == 'since'))
         filter_panel.addWidget(self.cb_usage_filter)
@@ -3241,6 +3266,7 @@ class ExamGeneratorApp(QMainWindow):
         layout.setSpacing(18)
 
         content = QWidget()
+        content.setObjectName("GenerationScrollContent")
         content.setMaximumWidth(880)
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
