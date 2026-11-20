@@ -6,6 +6,11 @@ spec 017. See the [acceptance report](../../specs/017-macos-distribution/accepta
 for evidence and remaining native/clean-machine checks. No Developer ID
 signature or notarization is provided by this configuration.
 
+Windows 2.0.0 has also been built and locally verified on Windows 11 x64 under
+[spec 019](../../specs/019-windows-distribution/acceptance.md). Its standalone
+`dist/Prometheus.exe` is a separate release asset; this directory contains only
+macOS tooling. GitHub publication remains an owner step.
+
 ## Visual preview only
 
 From the repository root, using the prepared development environment:

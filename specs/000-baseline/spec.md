@@ -210,6 +210,10 @@ Data structures are in [data-model.md](data-model.md).
   pending until a build is authorized and verified.
 - **BL-062** UI language is Brazilian Portuguese only.
 
+On Windows, application windows share one application-owned selection style across successive
+window construction; initializing another window does not invalidate the style
+still used by existing widgets (019 release-verification correction).
+
 ## Known defects and limitations
 
 | ID | Description | Addressed by |

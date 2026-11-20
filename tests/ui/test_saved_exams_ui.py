@@ -505,6 +505,7 @@ def test_unbroken_metadata_and_history_stay_within_available_width():
 
 
 def test_card_usage_and_popup_follow_theme_and_metadata_stays_green(window):
+    import sys
     from PySide6.QtGui import QColor, QPalette
     from PySide6.QtWidgets import QLabel
     window.show_filtered_questions()
@@ -515,7 +516,7 @@ def test_card_usage_and_popup_follow_theme_and_metadata_stays_green(window):
     window.apply_theme()
     card.usage_popup.activate()
     QApplication.processEvents()
-    assert card.usage_control.palette().color(QPalette.Button) == QColor('#313244')
+    assert card.usage_control.palette().color(QPalette.Button) == QColor('#292A3D' if sys.platform == 'win32' else '#313244')
     assert card.usage_popup.content.palette().color(QPalette.Window) == QColor('#252538')
     assert card.metadata_widget.palette().color(QPalette.Window) == QColor('#294338')
     assert card.findChild(QLabel, 'CardIdentifier').palette().color(QPalette.WindowText) == QColor('#E2E8F0')
@@ -807,13 +808,19 @@ def test_management_panel_fits_and_tracks_theme(window):
 
 
 def test_usage_filter_popup_follows_dark_theme(window):
+    import sys
     from PySide6.QtGui import QColor, QPalette
     window.is_dark_mode = True
     window.apply_theme()
     popup = window.cb_usage_filter.view().parentWidget()
     assert popup.objectName() == 'ComboPopupContainer'
     assert popup.palette().color(QPalette.Window) == QColor('#313244')
-    assert window.date_usage_filter.palette().color(QPalette.Base) == QColor('#313244')
+    assert not window.date_usage_filter.isEnabled()
+    assert window.date_usage_filter.palette().color(QPalette.Base) == QColor('#1E1E2E' if sys.platform == 'win32' else '#313244')
+    window.cb_usage_filter.setCurrentIndex(window.cb_usage_filter.findData('since'))
+    QApplication.processEvents()
+    assert window.date_usage_filter.isEnabled()
+    assert window.date_usage_filter.palette().color(QPalette.Base) == QColor('#292A3D' if sys.platform == 'win32' else '#313244')
 
 
 def test_help_dialog_is_wide_resizable_and_scrollable(window, monkeypatch):

@@ -3,6 +3,14 @@
 Prometheus follows Spec-Driven Development: behavior is specified before it is
 coded, and the documents here are the source of truth for what the app should do.
 
+Windows 2.0.0 is built and locally verified on Windows 11 x64: 429 source tests
+passed (one POSIX-only test skipped), 13 compiled-code Word outputs passed, and
+the standalone executable started and exited successfully with isolated empty
+and synthetic-bank profiles. The local artifact is `dist/Prometheus.exe`;
+GitHub upload/publication remains separate. See the
+[Windows acceptance report](../specs/019-windows-distribution/acceptance.md) and
+[release publishing guide](releases/publishing.md).
+
 ## Map
 
 | Document | Purpose |

@@ -39,6 +39,7 @@ options and filters, then returns to search. See the
 | 016 | [official-app-icon](../specs/016-official-app-icon/spec.md) | Use the supplied official icon in runtime and packaged artifacts | 015 | Implemented |
 | 017 | [macos-distribution](../specs/017-macos-distribution/spec.md) | Prepare a compact drag-to-Applications disk image and consistent Finder version metadata | 016 | arm64 app/DMG built for macOS 15+; local checks passed, remaining native acceptance documented |
 | 018 | [repository-release-preparation](../specs/018-repository-release-preparation/spec.md) | Remove disposable repository artifacts and prepare public documentation/release assets | 017 local build | Done; 866 MiB cleaned, release docs/assets prepared, no publication performed |
+| 019 | [windows-distribution](../specs/019-windows-distribution/spec.md) | Build and verify the Windows executable and update release documentation | 018 | Windows x64 built; 429 tests passed (one POSIX skip), 13 compiled Word checks and native startup/exit passed; publication pending |
 
 ## Owner-requested search fixes (2026-11-16)
 
@@ -86,9 +87,20 @@ v2.0.0, and the application version is now 2.0.0. The later 010 resize follow-up
 authorized committing, pushing and merging this work while explicitly
 excluding app builds. The owner later authorized the arm64 macOS 15+ app and
 DMG in 017; those local artifacts are now prepared. Remaining native acceptance,
-the Windows build, publication and the release tag are still pending. Spec 018
+publication and the release tag are still pending. The Windows build was
+subsequently authorized and verified in spec 019. Spec 018
 cleans disposable files and prepares the public README/release guidance.
 See the [release notes](releases/v2.0.0.md).
+
+On 2026-11-19 the owner authorized the Windows build, verification and README
+updates. Spec 019 produced `dist/Prometheus.exe` (2.0.0, x64), checksum and
+provenance. The clean Windows 11 environment passed 429 tests with one POSIX
+permission case skipped; compiled code produced 13 valid Word files, and the
+actual EXE started/exited with isolated empty and synthetic-bank profiles.
+A reproduced Windows style-lifetime crash was corrected before building.
+See the [Windows acceptance report](../specs/019-windows-distribution/acceptance.md)
+for remaining checks and macOS source-snapshot implications. No publication,
+commit or tag was performed by this task.
 
 On 2026-11-17, the owner confirmed that the implemented functionality works on
 Windows and macOS and requested that all platform checks be marked complete.

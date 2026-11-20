@@ -1168,6 +1168,13 @@ class AccessibleSelectionStyle(QProxyStyle):
         return super().drawPrimitive(element, option, painter, widget)
 
 
+def configure_application_selection_style():
+    """Keep one application-owned style alive for all Windows widgets."""
+    app = QApplication.instance()
+    if IS_WINDOWS and not isinstance(app.style(), AccessibleSelectionStyle):
+        app.setStyle(AccessibleSelectionStyle(QStyleFactory.create("Fusion")))
+
+
 class ResizableTreeWidget(VerticalResizeMixin, QTreeWidget):
     def __init__(self, initial_height=220, minimum_height=120, parent=None):
         super().__init__(parent)
@@ -1189,9 +1196,7 @@ class ExamGeneratorApp(QMainWindow):
     def __init__(self):
         super().__init__()
         QApplication.setFont(interface_font())
-        if IS_WINDOWS:
-            # One base style also covers controls created later and modal dialogs.
-            QApplication.instance().setStyle(AccessibleSelectionStyle(QStyleFactory.create("Fusion")))
+        configure_application_selection_style()
         self.resize(1250, 850)
         self.is_dark_mode = False
         self.apply_theme()

@@ -17,7 +17,11 @@ pronto para abrir.
 | Plataforma | Pacote da versão 2.0.0 | Requisitos e situação |
 |---|---|---|
 | macOS | `Prometheus-2.0.0-mac-arm64.dmg` | Apple Silicon (`arm64`), macOS 15.0 ou posterior |
-| Windows | Executável 2.0.0 ainda não gerado | O código-fonte e o script de build Windows estão no projeto |
+| Windows | `Prometheus.exe` — versão 2.0.0 | Windows de 64 bits (`x64`); compilado e validado localmente no Windows 11 |
+
+**A versão Windows 2.0.0 está pronta e passou nas verificações locais.** O
+executável está em `dist/Prometheus.exe`; sua publicação nos arquivos da release
+no GitHub é uma etapa separada.
 
 O DMG desta versão foi preparado com **assinatura ad-hoc, sem notarização da
 Apple**. Esse pacote não atende a Macs Intel. O aplicativo compilado inclui
@@ -44,6 +48,16 @@ aplicativo não transfere seus bancos de questões para outro computador.
 *Prévia ilustrativa da instalação. A aparência dos ícones do sistema pode
 variar conforme a versão do macOS.*
 
+### Usar no Windows
+
+1. Baixe `Prometheus.exe` nos arquivos da release quando estiver publicado.
+2. Salve o arquivo em uma pasta de sua preferência e abra-o com dois cliques.
+   O aplicativo é portátil: não exige instalador nem Python.
+3. Confira **Menu → Sobre** e crie ou abra seu banco de questões.
+
+Feche o aplicativo antes de substituir o executável por uma versão mais nova.
+Seus bancos e backups são arquivos separados e devem ser preservados.
+
 ### Conferir o arquivo baixado
 
 A release inclui `SHA256SUMS.txt`. Coloque-o na mesma pasta do DMG e execute
@@ -55,6 +69,15 @@ shasum -a 256 -c SHA256SUMS.txt
 
 O resultado esperado para o DMG é **OK**. O arquivo `macos-build-info.json`
 registra versões das dependências e informações de verificação do build.
+
+No Windows, compare o resultado abaixo com a linha de `Prometheus.exe` em
+`SHA256SUMS-windows.txt`, disponibilizado junto com o executável:
+
+```powershell
+Get-FileHash .\Prometheus.exe -Algorithm SHA256
+```
+
+O arquivo `windows-build-info.json` registra os dados do build Windows.
 
 ## O que o Prometheus faz
 
@@ -128,12 +151,20 @@ serviços de nuvem e mantenha backups separados do arquivo de trabalho.
 - O build macOS passou por **45 testes direcionados** e pela verificação de
   **13 arquivos Word** usando código compilado, além de verificações de
   assinatura, versão, recursos e layout do DMG.
+- O build Windows passou por **429 testes** (um teste de permissão exclusivo
+  de sistemas POSIX foi ignorado), **13 verificações de arquivos Word** com
+  código compilado e abertura/fechamento nativos com perfis de teste isolados.
+  Ícones, QR Code Pix, busca e provas salvas também foram verificados.
+- A validação Windows foi realizada no Windows 11 x64. Instalação em outra
+  máquina, comportamento após download e revisão visual no Microsoft Word
+  ainda não foram verificados.
 - Testes em instalação limpa, no macOS mínimo suportado, no Microsoft Word e
   a automação da janela nativa de salvar ainda estão pendentes. A tentativa de
   automação foi bloqueada pelas permissões de acessibilidade do macOS.
 
 Os detalhes e os limites dessas verificações estão no
-[relatório do pacote macOS](specs/017-macos-distribution/acceptance.md).
+[relatório do pacote macOS](specs/017-macos-distribution/acceptance.md) e no
+[relatório do executável Windows](specs/019-windows-distribution/acceptance.md).
 
 ## Executar o código-fonte
 
@@ -192,13 +223,22 @@ No Windows, execute o script no próprio Windows:
 .\build_windows.ps1
 ```
 
-O resultado esperado é `dist/Prometheus.exe`, que precisa de validação nessa
-plataforma. Não há um novo executável Windows 2.0.0 neste pacote macOS.
+O resultado é `dist/Prometheus.exe`. O executável Windows 2.0.0 já foi gerado
+e passou nas verificações locais descritas acima. Cada novo build precisa ser
+verificado antes da distribuição.
+
+Se a política local do PowerShell impedir a execução do script, execute esta
+alternativa na pasta do projeto, com o ambiente virtual ativo. Ela vale apenas
+para esse processo e não altera a política permanente do computador:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build_windows.ps1
+```
 
 ## Preparar uma release no GitHub
 
 Código-fonte, especificações e testes pertencem aos commits do repositório.
-O DMG e seus arquivos auxiliares devem ser anexados em **Releases**, como
+O executável Windows, o DMG e seus arquivos auxiliares devem ser anexados em **Releases**, como
 arquivos da versão `v2.0.0`; `dist/` permanece ignorada pelo Git.
 
 Veja o [guia de publicação](docs/releases/publishing.md) para a lista dos

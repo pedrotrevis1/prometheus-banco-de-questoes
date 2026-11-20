@@ -38,7 +38,7 @@ def test_bundle_identity_and_finder_version_follow_source(macos_spec_calls):
 def test_dmg_layout_uses_real_app_and_portuguese_applications_shortcut():
     layout = runpy.run_path(str(MACOS / "layout.py"))
     settings = layout["dmg_settings"](Path("/tmp/Prometheus.app"), Path("/tmp/background.png"))
-    assert settings["files"] == [("/tmp/Prometheus.app", "Prometheus.app")]
+    assert settings["files"] == [(str(Path("/tmp/Prometheus.app")), "Prometheus.app")]
     assert settings["symlinks"] == {"Aplicativos": "/Applications"}
     assert settings["window_rect"][1] == (640, 420)
     assert settings["default_view"] == "icon-view"
@@ -174,7 +174,9 @@ def test_inconsistent_bundle_is_rejected_before_packaging(app_bundle, dmg_tool, 
     assert calls == []
 
 
-@pytest.mark.parametrize("missing", ["executable", "icon", "permission"])
+@pytest.mark.parametrize("missing", ["executable", "icon", pytest.param(
+    "permission", marks=pytest.mark.skipif(sys.platform == "win32", reason="POSIX execute bits are unavailable on Windows"),
+)])
 def test_missing_bundle_content_is_rejected(app_bundle, dmg_tool, missing):
     tool, calls = dmg_tool
     executable = app_bundle / "Contents" / "MacOS" / "Prometheus"
