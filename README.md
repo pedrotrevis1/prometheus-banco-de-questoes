@@ -1,118 +1,222 @@
 # Prometheus — Banco de Questões
 
-Aplicativo para organizar bancos de questões e montar provas em formato Word, com interface em português brasileiro.
+Organize seu banco de questões e transforme seleções em provas e gabaritos
+para Word. O Prometheus é um aplicativo de desktop em português brasileiro,
+desenvolvido por **Pedro Trevisan**, com armazenamento local e funcionamento
+offline, sem conta, servidor ou coleta de telemetria.
 
-Desenvolvido por **Pedro Trevisan** em Python, utilizando PySide6, SQLite e python-docx.
+**Versão 2.0.0** · [Downloads e versões](https://github.com/pedrotrevis1/prometheus-banco-de-questoes/releases)
+· [Novidades da versão](docs/releases/v2.0.0-notes.md)
 
-## Funcionalidades
+## Download e requisitos
 
-- Organização de bancos de questões por disciplina e categorias.
-- Cadastro, edição e duplicação de questões de múltipla escolha e dissertativas.
-- Classificação por dificuldade, segmento e ano/série escolar.
-- Registro da fonte da questão e do ano de origem.
-- Formatação de texto e equações em enunciados, alternativas e respostas esperadas; imagens nos enunciados.
-- Busca com filtros por categoria, texto, dificuldade, tipo, ano/série, fonte e ano de origem.
-- Seleção de questões para composição de provas.
-- Provas salvas com nome, turma, ordem das questões e opções de geração.
-- Histórico de uso das questões e filtros por questões nunca usadas ou não usadas desde uma data.
-- Exportação de provas para Word, com questões em ordem escolhida, versões numeradas e gabarito opcional em arquivo separado.
-- Geração de múltiplas versões, com embaralhamento de questões e alternativas e opção de preservar a ordem das alternativas de uma questão.
-- Interface com temas claro e escuro.
+Baixe os aplicativos pela seção **Releases** deste repositório. Os arquivos
+**Source code** disponibilizados pelo GitHub contêm o projeto, não o aplicativo
+pronto para abrir.
 
-## Novidades da versão 2.0.0
+| Plataforma | Pacote da versão 2.0.0 | Requisitos e situação |
+|---|---|---|
+| macOS | `Prometheus-2.0.0-mac-arm64.dmg` | Apple Silicon (`arm64`), macOS 15.0 ou posterior |
+| Windows | Executável 2.0.0 ainda não gerado | O código-fonte e o script de build Windows estão no projeto |
 
-- Edição e duplicação de questões, com preservação do conteúdo formatado.
-- Categorias que podem ser renomeadas e movidas; filtrar uma categoria também inclui suas subcategorias.
-- Busca pelo texto visível, sem diferenciar maiúsculas ou acentos, incluindo alternativas e respostas esperadas.
-- Questões de múltipla escolha com duas a cinco alternativas.
-- Resultados paginados, seleção preservada entre páginas e filtro por intervalo do ano de origem.
-- Provas salvas por turma, histórico de uso e regeneração com preservação das ordens compatíveis.
-- Melhorias na exportação Word, nas imagens, nos gabaritos e na identificação das versões.
-- Atualização dos bancos com backup automático e relatório dos valores que precisam de revisão.
+O DMG desta versão foi preparado com **assinatura ad-hoc, sem notarização da
+Apple**. Esse pacote não atende a Macs Intel. O aplicativo compilado inclui
+suas dependências; não é necessário instalar Python para utilizá-lo.
 
-O código-fonte está preparado para a versão 2.0.0. A compilação e a verificação
-dos executáveis Windows e macOS ainda estão pendentes; não há novos aplicativos
-compilados nesta preparação. Consulte as [notas da versão](docs/releases/v2.0.0.md).
+### Instalar no macOS
 
-O ano de origem identifica quando a questão foi publicada ou aplicada. Ele é independente do ano/série escolar ao qual a questão se destina.
+1. Baixe `Prometheus-2.0.0-mac-arm64.dmg` nos arquivos da release 2.0.0.
+2. Abra o DMG e arraste **Prometheus** para o atalho **Aplicativos**.
+3. Aguarde a cópia, ejete a imagem de disco e abra **Prometheus** em Aplicativos.
+4. Confira a versão em **Menu → Sobre** e crie ou abra seu banco de questões.
 
-## Como usar no Windows
+Se o Gatekeeper bloquear a abertura, confira a origem do download e siga as
+[orientações da Apple](https://support.apple.com/pt-br/102445). Para este pacote
+sem notarização, pode ser necessário autorizar a abertura em **Ajustes do
+Sistema → Privacidade e Segurança → Abrir Mesmo Assim**, após tentar abrir o
+aplicativo.
 
-1. Baixe o executável Windows da versão publicada na seção **Releases** deste repositório. A preparação do código-fonte 2.0.0 não significa que o executável dessa versão já foi publicado.
-2. Salve o executável em uma pasta de sua preferência.
-3. Abra o arquivo para iniciar o aplicativo.
+Feche o Prometheus antes de substituir uma instalação existente. Atualizar o
+aplicativo não transfere seus bancos de questões para outro computador.
 
-A versão executável inclui as dependências necessárias. Não é preciso instalar Python nem executar um instalador.
+<img src="docs/releases/assets/macos-dmg-preview.png" width="640" alt="Prévia ilustrativa do DMG: arraste Prometheus para Aplicativos">
 
-### Fluxo de trabalho
+*Prévia ilustrativa da instalação. A aparência dos ícones do sistema pode
+variar conforme a versão do macOS.*
 
-1. **Escolha a disciplina:** crie um banco de questões ou abra um banco existente.
-2. **Cadastre as questões:** informe os dados, selecione as categorias e preencha o enunciado, as alternativas ou a resposta esperada.
-3. **Busque e selecione:** utilize os filtros e marque as questões que deseja incluir na prova.
-4. **Salve e gere a prova:** informe o nome e a turma, ajuste a ordem, o gabarito, as versões e o embaralhamento; depois salve os arquivos Word. Provas salvas podem ser retomadas posteriormente.
+### Conferir o arquivo baixado
 
-## Bancos de dados e backups
+A release inclui `SHA256SUMS.txt`. Coloque-o na mesma pasta do DMG e execute
+no Terminal, dentro dessa pasta:
 
-As questões são armazenadas localmente em arquivos SQLite (`.db`).
+```sh
+shasum -a 256 -c SHA256SUMS.txt
+```
 
-Antes de atualizar um banco antigo, confira o caminho exibido e mantenha uma
-cópia de segurança. **Não abra um banco atualizado em versões antigas do
-Prometheus:** elas não mostrarão as alterações corretamente. Leia o relatório de
-atualização e revise os valores indicados, sem substituir seu banco pelo backup.
+O resultado esperado para o DMG é **OK**. O arquivo `macos-build-info.json`
+registra versões das dependências e informações de verificação do build.
 
-No Windows, a configuração e o banco padrão ficam na pasta:
+## O que o Prometheus faz
 
-    %USERPROFILE%\.gerador_provas_app
+- Mantém bancos independentes por disciplina, com categorias e subcategorias.
+- Cadastra, edita e duplica questões de múltipla escolha e dissertativas.
+- Organiza dificuldade, segmento, ano/série escolar, fonte e ano de origem.
+- Permite texto formatado, imagens e marcações simples de equações.
+- Busca enunciados, alternativas e respostas sem diferenciar maiúsculas ou
+  acentos, com filtros e resultados paginados.
+- Preserva a seleção entre páginas e permite escolher a ordem das questões.
+- Salva provas com nome, turma e opções de geração, e registra o uso das questões.
+- Gera arquivos `.docx` com versões numeradas, embaralhamento opcional e
+  gabarito ao final ou em arquivo separado.
+- Permite manter a ordem das alternativas de uma questão específica.
+- Oferece temas claro e escuro, ajuda e backup pelo menu.
 
-Bancos criados ou abertos manualmente podem estar em outros locais, conforme a escolha do usuário.
+O **ano de origem** identifica quando a questão foi publicada ou aplicada;
+ele é independente do **ano/série escolar** ao qual a questão se destina.
 
-**Copiar apenas o executável não transfere as questões nem as configurações para outro computador.** Para transferir um banco, copie também o arquivo `.db` e abra-o no aplicativo.
+## Primeiros passos
 
-Use **Fazer backup** no menu para salvar uma cópia do banco em um novo arquivo.
-Antes de atualizar a estrutura de um banco, o aplicativo cria uma cópia
-automática. São mantidos até três backups automáticos por banco; quando for
-necessário excluir um backup antigo, o aplicativo exibirá o caminho e pedirá
-confirmação. Se você recusar, a atualização será cancelada.
+1. Abra **Menu → Criar Novo Banco (Disciplina)** ou **Abrir Banco Existente (.db)**.
+   Na primeira execução, a criação do banco padrão depende da sua confirmação.
+2. Em **Cadastrar Questão**, preencha os dados, selecione categorias e anos/séries
+   e informe o enunciado, alternativas ou resolução esperada.
+3. Em **Buscar e Selecionar Questões**, aplique os filtros e marque as questões.
+4. Em **Configurar e Gerar Prova**, ajuste turma, ordem, versões e gabarito;
+   salve a prova para retomá-la e gere os arquivos Word.
+5. Use **Nova prova** para começar outra seleção. O aplicativo pede confirmação
+   antes de descartar alterações não salvas.
 
-Se um banco não for encontrado, localize o arquivo ou remova a disciplina da
-lista. Remover da lista não apaga o arquivo. Evite sincronizar um banco aberto
-por serviços de nuvem e mantenha cópias de segurança separadas.
+Abra os arquivos gerados no Microsoft Word ou em um editor compatível e confira
+o conteúdo e a formatação antes de imprimir ou distribuir.
 
-## Executar a partir do código-fonte
+## Seus bancos e backups
 
-Use Python 3.14. As dependências de execução e desenvolvimento têm versões
-fixadas em `requirements.txt` e `requirements-dev.txt`.
+Cada banco é um arquivo SQLite (`.db`) escolhido por você. Configurações e o
+local padrão de dados ficam em:
 
-No PowerShell, dentro da pasta do projeto:
+| Sistema | Pasta |
+|---|---|
+| macOS | `~/Library/Application Support/GeradorProvasApp/` |
+| Windows | `%USERPROFILE%\.gerador_provas_app\` |
 
-    python -m venv .venv
-    .\.venv\Scripts\Activate.ps1
-    python -m pip install -r requirements-dev.txt
-    python -m prometheus
+O nome histórico da pasta no macOS é mantido para compatibilidade. Bancos
+criados ou abertos em outros locais permanecem nesses locais.
 
-No macOS, ative o ambiente com `source .venv/bin/activate` e use os mesmos
-comandos de instalação e execução. Para executar os testes sem abrir uma janela:
+**Antes de atualizar um banco antigo, mantenha uma cópia de segurança. Não
+abra um banco atualizado em versões antigas do Prometheus:** elas podem não
+exibir os dados novos corretamente. Leia os avisos de atualização e revise
+os valores apontados no relatório de migração.
 
-    python -m pytest
+Use **Menu → Fazer backup** para criar uma cópia consistente do banco. Antes
+de atualizar sua estrutura, o aplicativo cria um backup automático. São
+mantidos até três backups automáticos por banco; a exclusão de um backup
+antigo exige confirmação, e recusá-la cancela a atualização.
 
-Para gerar o executável no Windows, no ambiente preparado acima:
+Para mudar de computador, copie o arquivo `.db` e abra-o no novo aplicativo.
+**Copiar apenas o aplicativo não transfere as questões.** Remover uma
+disciplina da lista não apaga o banco. Evite sincronizar um banco aberto por
+serviços de nuvem e mantenha backups separados do arquivo de trabalho.
 
-    .\build_windows.ps1
+## Limitações e verificação
 
-O executável é criado em `dist/Prometheus.exe`. O comando deve ser executado no
-Windows; o resultado precisa ser testado nesse sistema, incluindo o QR Code Pix
-em **Sobre**. O macOS também é uma plataforma oficialmente suportada.
+- Tabelas e listas coladas podem perder a estrutura na exportação. As marcações
+  de equações não substituem um editor completo de equações do Word.
+- Os arquivos de prova não incluem cabeçalho escolar; use o modelo da sua instituição.
+- A escolha do tema não é lembrada entre sessões.
+- A exclusão de questões atua sobre toda a seleção, inclusive questões ocultas
+  por filtros ou por outra página. Revise a confirmação antes de excluir.
+- O build macOS passou por **45 testes direcionados** e pela verificação de
+  **13 arquivos Word** usando código compilado, além de verificações de
+  assinatura, versão, recursos e layout do DMG.
+- Testes em instalação limpa, no macOS mínimo suportado, no Microsoft Word e
+  a automação da janela nativa de salvar ainda estão pendentes. A tentativa de
+  automação foi bloqueada pelas permissões de acessibilidade do macOS.
 
-Os builds usam o ícone oficial em `icon/prometheus-icon-apple Exports/`. Ele é
-aplicado à janela em execução e ao artefato do sistema; no Windows, o build usa
-`icon/Prometheus.ico`. Para gerar o macOS, instale as dependências de
-`requirements-dev.txt` (o PyInstaller usa Pillow para converter o PNG para o
-formato de ícone do bundle) e execute `./build_macos.sh` em um Mac. O bundle
-usa o identificador `com.pedrotrevisan.prometheus`.
+Os detalhes e os limites dessas verificações estão no
+[relatório do pacote macOS](specs/017-macos-distribution/acceptance.md).
 
-O código está disponível com todos os direitos reservados; nenhuma licença de
-reutilização é concedida.
+## Executar o código-fonte
 
-## Privacidade
+Requer **Python 3.14**. As dependências têm versões fixadas em
+`requirements.txt` e `requirements-dev.txt`.
 
-Os bancos de questões e as configurações são armazenados localmente. O usuário é responsável por escolher onde guardar, compartilhar e fazer backup desses arquivos.
+No macOS, dentro da pasta do projeto:
+
+```sh
+python3.14 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m prometheus
+```
+
+No Windows, pelo PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m prometheus
+```
+
+### Desenvolvimento e testes
+
+Com o ambiente virtual ativo:
+
+```sh
+python -m pip install -r requirements-dev.txt
+python -m pytest
+```
+
+O fluxo de contribuição é orientado por especificações: leia
+[AGENTS.md](AGENTS.md), a [constituição](docs/constitution.md) e o
+[roadmap](docs/roadmap.md) antes de alterar o projeto. Os testes de regressão
+fazem parte do código-fonte e devem acompanhar as mudanças.
+
+### Gerar aplicativos
+
+No Mac de destino, com as dependências de desenvolvimento instaladas:
+
+```sh
+./build_macos.sh
+./build_macos_dmg.sh
+```
+
+O primeiro comando gera `dist/Prometheus.app`; o segundo empacota esse app
+existente no DMG. O empacotamento recusa substituir um DMG já existente.
+Consulte os [detalhes do build macOS](packaging/macos/README.md) para informar
+outro destino e para os requisitos de assinatura e aceitação.
+
+No Windows, execute o script no próprio Windows:
+
+```powershell
+.\build_windows.ps1
+```
+
+O resultado esperado é `dist/Prometheus.exe`, que precisa de validação nessa
+plataforma. Não há um novo executável Windows 2.0.0 neste pacote macOS.
+
+## Preparar uma release no GitHub
+
+Código-fonte, especificações e testes pertencem aos commits do repositório.
+O DMG e seus arquivos auxiliares devem ser anexados em **Releases**, como
+arquivos da versão `v2.0.0`; `dist/` permanece ignorada pelo Git.
+
+Veja o [guia de publicação](docs/releases/publishing.md) para a lista dos
+arquivos locais a anexar e as verificações antes da publicação. As
+[notas públicas da versão](docs/releases/v2.0.0-notes.md) estão prontas para
+usar como descrição da release. A preparação local não publica a versão.
+
+## Privacidade, responsabilidade e direitos
+
+Os bancos e as configurações ficam no seu computador. O aplicativo não faz
+requisições de rede nem coleta telemetria. Você controla os arquivos, seus
+backups e qualquer compartilhamento realizado fora do aplicativo.
+
+Revise questões, respostas, imagens e documentos antes de utilizá-los.
+O conteúdo e seus direitos de uso são responsabilidade de quem o cadastra e
+distribui; o aplicativo é uma ferramenta de apoio, sem garantia de ausência
+de erros. Consulte o aviso em **Menu → Sobre**.
+
+**Todos os direitos reservados.** A disponibilidade do código neste repositório
+não concede licença de reutilização. Créditos e a opção de doação por Pix
+estão em **Menu → Sobre**.

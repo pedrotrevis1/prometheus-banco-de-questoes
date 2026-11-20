@@ -6,5 +6,17 @@ __pycache__/
 build/
 dist/
 *.spec
+!packaging/macos/Prometheus.spec
 *.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
+*.sqlite3-wal
+*.sqlite3-shm
+*.sqlite3-journal
 .DS_Store
