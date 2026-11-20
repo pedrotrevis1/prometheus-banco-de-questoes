@@ -30,7 +30,9 @@ Data structures are in [data-model.md](data-model.md).
   notice below the donation button describing user responsibility for content
   and use of the application.
 - **BL-006** The application uses the official icon supplied under `icon/` for
-  its runtime windows and packaged Windows/macOS artifacts.
+  its runtime windows and packaged Windows/macOS artifacts. Frozen runtime
+  icon lookup matches the build scripts' bundled asset directory and works
+  independently of the working directory, as does the Pix image lookup.
 
 ## Disciplines and question banks
 
@@ -193,7 +195,19 @@ Data structures are in [data-model.md](data-model.md).
 
 - **BL-060** Fully offline; no network access.
 - **BL-061** Distributed for Windows as a single executable built with
-  PyInstaller. The source also runs on macOS.
+  PyInstaller. macOS packaging prepares a one-file executable inside
+  `Prometheus.app`, with both Finder version fields read from the single app
+  version source. A separate DMG command wraps an existing matching bundle
+  in a compact 640 × 420 drag-to-Applications presentation with Portuguese
+  guidance and an `Aplicativos` shortcut targeting `/Applications`. No
+  installer process is required. Disk-image preparation preserves the app's
+  strict signature validity without adding post-signing FinderInfo metadata.
+  Frozen packages include python-docx templates and physical package
+  directories so exam and answer-key footer/header creation works offline.
+  The owner's macOS build target is Apple Silicon (`arm64`) on macOS 15.0 or
+  newer, declared in bundle metadata; this build uses ad-hoc signing.
+  Native packaged-app acceptance remains
+  pending until a build is authorized and verified.
 - **BL-062** UI language is Brazilian Portuguese only.
 
 ## Known defects and limitations

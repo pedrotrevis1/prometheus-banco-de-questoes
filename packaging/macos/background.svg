@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420" viewBox="0 0 640 420">
+  <defs>
+    <linearGradient id="surface" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f5f7fa"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="420" fill="url(#surface)"/>
+  <g font-family="Helvetica Neue" text-anchor="middle">
+    <text x="320" y="72" fill="#1d1d1f" font-size="28" font-weight="600">Instale o Prometheus</text>
+    <text x="320" y="103" fill="#6e6e73" font-size="14">Arraste o Prometheus para a pasta Aplicativos.</text>
+    <text x="320" y="369" fill="#6e6e73" font-size="13">Depois, abra o Prometheus na pasta Aplicativos.</text>
+  </g>
+  <path d="M 297 224 H 343 M 331 212 L 343 224 L 331 236"
+        fill="none" stroke="#4386d8" stroke-width="3"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

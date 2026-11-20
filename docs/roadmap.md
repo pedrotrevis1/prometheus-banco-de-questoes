@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-11-18
+Last updated: 2026-11-19
 
 Follow the dependencies and the ordered tasks within each iteration. Iteration
 006 is implemented with automated checks; platform and release checks remain.
@@ -37,6 +37,8 @@ options and filters, then returns to search. See the
 | 014 | [help-dialog-layout](../specs/014-help-dialog-layout/spec.md) | Make the Ajuda guide wide, resizable and scrollable | 013 | Implemented |
 | 015 | [help-and-legal-copy](../specs/015-help-and-legal-copy/spec.md) | Refresh help guidance and add legal fine print to Sobre | 014 | Implemented |
 | 016 | [official-app-icon](../specs/016-official-app-icon/spec.md) | Use the supplied official icon in runtime and packaged artifacts | 015 | Implemented |
+| 017 | [macos-distribution](../specs/017-macos-distribution/spec.md) | Prepare a compact drag-to-Applications disk image and consistent Finder version metadata | 016 | arm64 app/DMG built for macOS 15+; local checks passed, remaining native acceptance documented |
+| 018 | [repository-release-preparation](../specs/018-repository-release-preparation/spec.md) | Remove disposable repository artifacts and prepare public documentation/release assets | 017 local build | Done; 866 MiB cleaned, release docs/assets prepared, no publication performed |
 
 ## Owner-requested search fixes (2026-11-16)
 
@@ -76,14 +78,17 @@ preparation and remaining release checks retain their recorded scope.
 
 | Release | Contents |
 |---|---|
-| v2.0.0 | Implemented work in 001–010, including the 005 schema change |
+| v2.0.0 | Implemented work in 001–017, including schema 6 and the arm64 macOS package; 018 prepares repository/docs for publication |
 
 The owner skipped the previously suggested v1.2.0 and v1.3.0 releases. The
 005/006 implementation and review fixes are included in source preparation for
 v2.0.0, and the application version is now 2.0.0. The later 010 resize follow-up is complete and accepted by the owner. On 2026-11-18, the owner
 authorized committing, pushing and merging this work while explicitly
-excluding app builds. Packaging, executable acceptance, publication and the
-release tag remain pending. See the [release notes](releases/v2.0.0.md).
+excluding app builds. The owner later authorized the arm64 macOS 15+ app and
+DMG in 017; those local artifacts are now prepared. Remaining native acceptance,
+the Windows build, publication and the release tag are still pending. Spec 018
+cleans disposable files and prepares the public README/release guidance.
+See the [release notes](releases/v2.0.0.md).
 
 On 2026-11-17, the owner confirmed that the implemented functionality works on
 Windows and macOS and requested that all platform checks be marked complete.

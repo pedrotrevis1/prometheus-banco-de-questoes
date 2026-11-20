@@ -1,0 +1,20 @@
+{
+  "removed_bytes": 908083858,
+  "removed_mib": 866.0,
+  "tracked_generated_files_removed": 32,
+  "cache_directories_removed": 10,
+  "finder_metadata_files_removed": 5,
+  "disposable_database_removed": "build/macos-runtime/acceptance-bank.db",
+  "database_safety_checks_passed": true,
+  "current_app_configuration_unchanged": true,
+  "release_files_preserved": [
+    "dist/Prometheus-2.0.0-mac-arm64.dmg",
+    "dist/Prometheus.app/Contents/Info.plist",
+    "dist/Prometheus.app/Contents/MacOS/Prometheus",
+    "dist/Prometheus.app/Contents/Resources/generated-11cfdced51ce80cf00299a5e3eb4b46c3306430b198aa6c27dddc9de03510c4b.icns",
+    "dist/Prometheus.app/Contents/_CodeSignature/CodeResources",
+    "dist/SHA256SUMS.txt",
+    "dist/macos-build-info.json"
+  ],
+  "dmg_sha256": "4fac0ef532dfc9c0f7e464c996774ae4475c631ec7ec8ece01e51bdcaa6ef028"
+}
